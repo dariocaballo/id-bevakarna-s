@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, Trophy, Calendar, Clock, Crown, Star, Target } from 'lucide-react';
+import { TrendingUp, Trophy, Calendar, Clock, Crown, Star, Target, BarChart3 } from 'lucide-react';
 import logoImage from '@/assets/id-bevakarna-logo.png';
 
 interface Sale {
@@ -44,14 +44,42 @@ const Dashboard = () => {
       setTimeout(loadSales, 100);
     };
 
+    // Lyssna på borttagna försäljningar
+    const handleDeletedSale = () => {
+      loadSales();
+    };
+
     window.addEventListener('newSale', handleNewSale as EventListener);
+    window.addEventListener('saleDeleted', handleDeletedSale as EventListener);
     
     // Auto-refresh varje 30 sekunder
     const interval = setInterval(loadSales, 30000);
 
+    // Kolla automatisk återställning av dagsstatistik
+    const checkDailyReset = () => {
+      const lastResetDate = localStorage.getItem('lastDailyReset');
+      const today = new Date().toDateString();
+      
+      if (lastResetDate !== today) {
+        // Ny dag, markera att vi kollade
+        localStorage.setItem('lastDailyReset', today);
+        
+        // Ladda om sales för att visa ny dagsstatistik
+        loadSales();
+      }
+    };
+
+    // Kolla reset vid start
+    checkDailyReset();
+    
+    // Kolla reset varje minut
+    const resetInterval = setInterval(checkDailyReset, 60000);
+
     return () => {
       window.removeEventListener('newSale', handleNewSale as EventListener);
+      window.removeEventListener('saleDeleted', handleDeletedSale as EventListener);
       clearInterval(interval);
+      clearInterval(resetInterval);
     };
   }, []);
 
@@ -152,7 +180,7 @@ const Dashboard = () => {
           <img 
             src={logoImage} 
             alt="ID-Bevakarna" 
-            className="w-full h-full object-contain rounded-full"
+            className="w-full h-full object-contain"
           />
         </div>
         <h1 className="text-5xl font-bold text-primary mb-2">ID-Bevakarna</h1>
@@ -243,6 +271,53 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Stapeldiagram */}
+      {topSellersByMonth.length > 0 && (
+        <Card className="card-shadow border-0 mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-primary">
+              <BarChart3 className="w-6 h-6" />
+              Månadens försäljning per säljare
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {topSellersByMonth.map((seller, index) => {
+                const maxAmount = Math.max(...topSellersByMonth.map(s => s.monthTotal));
+                const percentage = (seller.monthTotal / maxAmount) * 100;
+                
+                return (
+                  <div key={seller.name} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-foreground">{seller.name}</span>
+                      <span className="text-sm font-bold text-primary">{formatCurrency(seller.monthTotal)}</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-4 overflow-hidden relative">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${
+                          index === 0 ? 'hero-gradient' : 
+                          index === 1 ? 'bg-gradient-to-r from-yellow-400 to-yellow-500' : 
+                          index === 2 ? 'bg-gradient-to-r from-orange-400 to-orange-500' : 'success-gradient'
+                        }`}
+                        style={{ 
+                          width: `${percentage}%`,
+                          animationDelay: `${index * 200}ms`
+                        }}
+                      >
+                        {/* Glowing effect for top performer */}
+                        {index === 0 && (
+                          <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Topplistor */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

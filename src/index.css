@@ -183,6 +183,28 @@
   }
   
   .animate-celebration {
-    animation: celebration 0.8s ease-in-out;
+    animation: celebration 0.8s ease-in-out, pulse-glow 2s ease-in-out infinite;
+  }
+  
+  .animate-bar-grow {
+    animation: bar-grow 1s ease-out forwards;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(34, 197, 94, 0.6);
+    }
+  }
+
+  @keyframes bar-grow {
+    from {
+      width: 0%;
+    }
+    to {
+      width: var(--target-width);
+    }
   }
 }

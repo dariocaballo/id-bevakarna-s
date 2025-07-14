@@ -1,17 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { TrendingUp, User, DollarSign, CheckCircle } from 'lucide-react';
+import { TrendingUp, User, DollarSign, CheckCircle, Trash2, Clock } from 'lucide-react';
 import logoImage from '@/assets/id-bevakarna-logo.png';
+
+interface Sale {
+  id: string;
+  sellerName: string;
+  amount: number;
+  timestamp: string;
+  date: string;
+}
 
 const Seller = () => {
   const [sellerName, setSellerName] = useState('');
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    loadRecentSales();
+    
+    // Auto-refresh recent sales every 10 seconds
+    const interval = setInterval(loadRecentSales, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadRecentSales = () => {
+    const existingSales = JSON.parse(localStorage.getItem('sales') || '[]');
+    const today = new Date().toDateString();
+    const todaysSales = existingSales
+      .filter((sale: Sale) => sale.date === today)
+      .sort((a: Sale, b: Sale) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
+    setRecentSales(todaysSales);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +93,9 @@ const Seller = () => {
       setAmount('');
       setSellerName('');
       
+      // Update recent sales list
+      loadRecentSales();
+      
     } catch (error) {
       toast({
         title: "Något gick fel",
@@ -77,6 +107,49 @@ const Seller = () => {
     }
   };
 
+  const handleDeleteSale = async (saleId: string) => {
+    try {
+      const existingSales = JSON.parse(localStorage.getItem('sales') || '[]');
+      const updatedSales = existingSales.filter((sale: Sale) => sale.id !== saleId);
+      localStorage.setItem('sales', JSON.stringify(updatedSales));
+      
+      // Trigger custom event for real-time updates
+      window.dispatchEvent(new CustomEvent('saleDeleted', { detail: saleId }));
+      
+      toast({
+        title: "Försäljning borttagen",
+        description: "Försäljningen har tagits bort och statistiken uppdaterats.",
+        className: "text-white border-success bg-success"
+      });
+      
+      // Update recent sales list
+      loadRecentSales();
+      
+    } catch (error) {
+      toast({
+        title: "Fel vid borttagning",
+        description: "Kunde inte ta bort försäljningen.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('sv-SE', {
+      style: 'currency',
+      currency: 'SEK',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString('sv-SE', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-background p-4">
       <div className="max-w-md mx-auto pt-16">
@@ -86,7 +159,7 @@ const Seller = () => {
             <img 
               src={logoImage} 
               alt="ID-Bevakarna" 
-              className="w-full h-full object-contain rounded-full"
+              className="w-full h-full object-contain"
             />
           </div>
           <h1 className="text-3xl font-bold text-primary mb-2">ID-Bevakarna</h1>
@@ -155,6 +228,41 @@ const Seller = () => {
             </form>
           </CardContent>
         </Card>
+
+        {/* Senaste försäljningar */}
+        {recentSales.length > 0 && (
+          <Card className="card-shadow border-0 mt-6">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-lg text-primary flex items-center justify-center gap-2">
+                <Clock className="w-5 h-5" />
+                Dagens senaste försäljningar
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {recentSales.map((sale) => (
+                  <div key={sale.id} className="flex items-center justify-between p-3 rounded-lg bg-accent/10 smooth-transition hover:bg-accent/20">
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">{sale.sellerName}</p>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatTime(sale.timestamp)} • {formatCurrency(sale.amount)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteSale(sale.id)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-muted-foreground">
