@@ -118,8 +118,8 @@ const Dashboard = () => {
         { event: '*', schema: 'public', table: 'sellers' },
         async (payload) => {
           console.log('Sellers update:', payload);
-          await loadSellers();
-          await loadSalesData(); // Reload sales data when sellers change
+          const sellersData = await loadSellers();
+          await loadSalesData(sellersData); // Reload sales data when sellers change
         }
       )
       .on(
@@ -142,7 +142,7 @@ const Dashboard = () => {
     
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
-      loadSalesData();
+      loadSalesData(); // Will fetch fresh sellers data
     }, 30000);
     
     return () => {
@@ -155,12 +155,18 @@ const Dashboard = () => {
 
   // Load sellers first, then sales data to ensure proper image mapping
   const loadInitialData = async () => {
-    await loadSellers();
-    await loadSalesData();
+    const sellersData = await loadSellers();
+    await loadSalesData(sellersData);
   };
 
-  const loadSalesData = async () => {
+  const loadSalesData = async (sellersData?: Seller[]) => {
     try {
+      // Use provided sellers data or fetch fresh data
+      let currentSellers = sellersData;
+      if (!currentSellers) {
+        const { data } = await supabase.from('sellers').select('*');
+        currentSellers = data || [];
+      }
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -202,13 +208,13 @@ const Dashboard = () => {
       
       const topSellersArray = Object.entries(monthlySellerTotals)
         .map(([name, data]) => {
-          const seller = sellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
+          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
           console.log('🖼️ TopSeller mapping:', { 
             name, 
             sellerId: data.sellerId, 
             found_seller: !!seller,
             image_url: seller?.profile_image_url,
-            sellers_count: sellers.length
+            sellers_count: currentSellers.length
           });
           return {
             name,
@@ -232,13 +238,13 @@ const Dashboard = () => {
       
       const todaysSellersArray = Object.entries(todaysSellerTotals)
         .map(([name, data]) => {
-          const seller = sellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
+          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
           console.log('🖼️ TodaySeller mapping:', { 
             name, 
             sellerId: data.sellerId, 
             found_seller: !!seller,
             image_url: seller?.profile_image_url,
-            sellers_count: sellers.length
+            sellers_count: currentSellers.length
           });
           return {
             name,
@@ -259,7 +265,7 @@ const Dashboard = () => {
     }
   };
 
-  const loadSellers = async () => {
+  const loadSellers = async (): Promise<Seller[]> => {
     try {
       const { data, error } = await supabase.from('sellers').select('*');
       if (error) throw error;
@@ -269,8 +275,10 @@ const Dashboard = () => {
         has_image: !!s.profile_image_url 
       })));
       setSellers(data || []);
+      return data || [];
     } catch (error) {
       console.error('Error loading sellers:', error);
+      return [];
     }
   };
 
