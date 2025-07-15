@@ -79,17 +79,23 @@ const Dashboard = () => {
             
             // Hämta aktuell säljarlista för att säkerställa vi har rätt data
             const { data: currentSellers } = await supabase.from('sellers').select('*');
-            const seller = currentSellers?.find(s => s.id === newSale.seller_id);
             
+            // Försök matcha på seller_id först, sedan på namn (case-insensitive)
+            let seller = currentSellers?.find(s => s.id === newSale.seller_id);
+            if (!seller && newSale.seller_name) {
+              seller = currentSellers?.find(s => s.name.toLowerCase() === newSale.seller_name.toLowerCase());
+            }
+            
+            console.log('🎵 Sale details:', { seller_id: newSale.seller_id, seller_name: newSale.seller_name });
             console.log('🎵 Found seller:', seller?.name);
             console.log('🎵 Sound URL:', seller?.sound_file_url);
-            console.log('🎵 Seller ID from sale:', newSale.seller_id);
+            console.log('🎵 Available sellers:', currentSellers?.map(s => s.name));
             
             if (seller?.sound_file_url) {
               try {
-                console.log('🎵 Attempting to play custom sound...');
+                console.log(`🎵 Attempting to play custom sound for ${seller.name}:`, seller.sound_file_url);
                 const audio = new Audio(seller.sound_file_url);
-                audio.volume = 0.8; // Höj volymen
+                audio.volume = 1.0; // Full volym för säljares eget ljud
                 audio.crossOrigin = 'anonymous'; // För CORS
                 
                 // Försök spela ljudet
@@ -102,12 +108,12 @@ const Dashboard = () => {
                 }
               } catch (error) {
                 console.error('❌ Error playing custom sound:', error);
-                console.log('🔄 Falling back to default applause...');
-                playApplauseSound(); // Fallback till standard
+                console.log('❌ Sound URL that failed:', seller.sound_file_url);
+                // INGEN FALLBACK - endast säljarens ljud ska spelas
               }
             } else {
-              console.log('🔄 No custom sound found, playing default applause');
-              playApplauseSound();
+              console.log('❌ No custom sound found for seller:', newSale.seller_name);
+              console.log('❌ Seller data:', seller);
             }
           }
           loadSalesData();
