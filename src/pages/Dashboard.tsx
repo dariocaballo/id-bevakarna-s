@@ -49,18 +49,30 @@ const Dashboard = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
-        (payload) => {
+        async (payload) => {
           console.log('Sales update:', payload);
           if (payload.eventType === 'INSERT') {
             const newSale = payload.new as Sale;
             setLastSale(newSale);
             
-            // Play custom sound for seller if available
-            const seller = sellers.find(s => s.id === newSale.seller_id);
+            // Hämta aktuell säljarlista för att säkerställa vi har rätt data
+            const { data: currentSellers } = await supabase.from('sellers').select('*');
+            const seller = currentSellers?.find(s => s.id === newSale.seller_id);
+            
+            console.log('Playing sound for seller:', seller?.name, 'Sound URL:', seller?.sound_file_url);
+            
             if (seller?.sound_file_url) {
-              const audio = new Audio(seller.sound_file_url);
-              audio.play().catch(console.error);
+              try {
+                const audio = new Audio(seller.sound_file_url);
+                audio.volume = 0.7; // Sätt volym
+                await audio.play();
+                console.log('Successfully played custom sound for:', seller.name);
+              } catch (error) {
+                console.error('Error playing custom sound:', error);
+                playApplauseSound(); // Fallback till standard
+              }
             } else {
+              console.log('No custom sound found, playing default applause');
               playApplauseSound();
             }
           }
