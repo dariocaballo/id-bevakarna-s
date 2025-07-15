@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { playApplauseSound } from '@/utils/sound';
+import idBevakarnaLogo from '@/assets/id-bevakarna-logo.png';
 
 interface Sale {
   id: string;
@@ -195,23 +196,22 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-white p-3 shadow-lg">
+        <div className="text-center mb-6">
+          <div className="w-48 h-16 mx-auto mb-3 rounded-lg overflow-hidden">
             <img 
-              src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
+              src={idBevakarnaLogo} 
               alt="ID-Bevakarna" 
               className="w-full h-full object-contain"
             />
           </div>
-          <h1 className="text-5xl font-bold text-blue-800 mb-2">ID-Bevakarna</h1>
-          <p className="text-xl text-blue-600">Live Säljdashboard</p>
-          <p className="text-sm text-blue-500 mt-2">
+          <p className="text-lg text-blue-600">Live Säljdashboard</p>
+          <p className="text-sm text-blue-500 mt-1">
             Uppdaterad: {new Date().toLocaleTimeString('sv-SE')}
           </p>
         </div>
 
         {/* Dagens och Månadens totala TB */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg text-blue-800 font-bold">
@@ -247,7 +247,7 @@ const Dashboard = () => {
 
         {/* Dagens försäljning per säljare - Cirklar */}
         {todaysSellers.length > 0 && (
-          <Card className="shadow-lg border-0 bg-white mb-8">
+          <Card className="shadow-lg border-0 bg-white mb-6">
             <CardHeader>
               <CardTitle className="text-xl text-blue-800 font-bold text-center">
                 Dagens försäljning per säljare
