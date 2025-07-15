@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { playApplauseSound } from '@/utils/sound';
-import idBevakarnaLogo from '@/assets/id-bevakarna-logo.png';
 
 interface Sale {
   id: string;
@@ -199,7 +198,7 @@ const Dashboard = () => {
         <div className="text-center mb-6">
           <div className="w-48 h-16 mx-auto mb-3 rounded-lg overflow-hidden">
             <img 
-              src={idBevakarnaLogo} 
+              src="/lovable-uploads/7852a369-a453-428b-8c54-b37c09c280b2.png"
               alt="ID-Bevakarna" 
               className="w-full h-full object-contain"
             />
