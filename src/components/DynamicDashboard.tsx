@@ -380,7 +380,9 @@ export function DynamicDashboard({ salesData, sellers, challenges, settings }: D
         .from('dashboard_layouts')
         .select('*')
         .eq('is_active', true)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error) {
         console.error('Error loading active layout:', error);

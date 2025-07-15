@@ -819,19 +819,27 @@ export function AdvancedLayoutEditor() {
     if (!activeLayout) return;
 
     try {
+      // First ensure this layout is active by deactivating others
+      await supabase
+        .from('dashboard_layouts')
+        .update({ is_active: false })
+        .neq('id', '');
+
+      // Then save and activate the current layout
       const { error } = await supabase
         .from('dashboard_layouts')
         .update({
           layout_config: JSON.parse(JSON.stringify(activeLayout.layout_config)),
-          theme_config: JSON.parse(JSON.stringify(activeLayout.theme_config))
+          theme_config: JSON.parse(JSON.stringify(activeLayout.theme_config)),
+          is_active: true
         })
         .eq('id', activeLayout.id);
 
       if (error) throw error;
 
       toast({
-        title: "Sparad",
-        description: "Layout sparad och uppdaterad!"
+        title: "Sparad och aktiverad",
+        description: "Layout sparad och uppdateras nu på dashboarden!"
       });
 
       await loadLayouts();
