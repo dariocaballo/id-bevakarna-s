@@ -44,6 +44,39 @@ export type Database = {
         }
         Relationships: []
       }
+      dashboard_layouts: {
+        Row: {
+          created_at: string
+          custom_elements: Json
+          id: string
+          is_active: boolean
+          layout_config: Json
+          layout_name: string
+          theme_config: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          custom_elements?: Json
+          id?: string
+          is_active?: boolean
+          layout_config?: Json
+          layout_name?: string
+          theme_config?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          custom_elements?: Json
+          id?: string
+          is_active?: boolean
+          layout_config?: Json
+          layout_name?: string
+          theme_config?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       dashboard_settings: {
         Row: {
           created_at: string

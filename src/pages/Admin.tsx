@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2 } from 'lucide-react';
+import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus } from 'lucide-react';
 
 interface Seller {
   id: string;
@@ -50,6 +50,9 @@ const Admin = () => {
   const [newChallenge, setNewChallenge] = useState({ title: '', description: '', target_amount: 0 });
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<DailyChallenge | null>(null);
+  const [layouts, setLayouts] = useState<any[]>([]);
+  const [activeLayout, setActiveLayout] = useState<any>(null);
+  const [draggedComponent, setDraggedComponent] = useState<any>(null);
 
   // Authentication
   const handleLogin = () => {
@@ -74,6 +77,7 @@ const Admin = () => {
       loadSellers();
       loadChallenges();
       loadSettings();
+      loadLayouts();
     }
   }, [isAuthenticated]);
 
@@ -105,6 +109,17 @@ const Admin = () => {
         settingsObj[setting.setting_key] = setting.setting_value;
       });
       setSettings(settingsObj);
+    }
+  };
+
+  const loadLayouts = async () => {
+    const { data, error } = await supabase.from('dashboard_layouts').select('*').order('created_at', { ascending: false });
+    if (error) {
+      toast({ title: "Fel", description: "Kunde inte ladda layouts", variant: "destructive" });
+    } else {
+      setLayouts(data || []);
+      const active = data?.find(layout => layout.is_active);
+      if (active) setActiveLayout(active);
     }
   };
 
@@ -331,6 +346,113 @@ const Admin = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  // Layout management functions
+  const updateLayoutConfig = async (layoutId: string, newConfig: any) => {
+    const { error } = await supabase
+      .from('dashboard_layouts')
+      .update({ layout_config: newConfig })
+      .eq('id', layoutId);
+
+    if (error) {
+      toast({ title: "Fel", description: "Kunde inte uppdatera layout", variant: "destructive" });
+    } else {
+      setActiveLayout(prev => ({ ...prev, layout_config: newConfig }));
+      toast({ title: "Framgång", description: "Layout uppdaterad!" });
+      loadLayouts(); // Reload to get fresh data
+    }
+  };
+
+  const updateThemeConfig = async (key: string, value: any) => {
+    if (!activeLayout) return;
+    
+    const newThemeConfig = { ...activeLayout.theme_config, [key]: value };
+    const { error } = await supabase
+      .from('dashboard_layouts')
+      .update({ theme_config: newThemeConfig })
+      .eq('id', activeLayout.id);
+
+    if (error) {
+      toast({ title: "Fel", description: "Kunde inte uppdatera tema", variant: "destructive" });
+    } else {
+      setActiveLayout(prev => ({ ...prev, theme_config: newThemeConfig }));
+      toast({ title: "Framgång", description: "Tema uppdaterat!" });
+    }
+  };
+
+  const toggleComponentVisibility = async (componentId: string) => {
+    if (!activeLayout) return;
+    
+    const updatedComponents = activeLayout.layout_config.components.map((comp: any) =>
+      comp.id === componentId ? { ...comp, visible: !comp.visible } : comp
+    );
+    
+    const updatedConfig = { ...activeLayout.layout_config, components: updatedComponents };
+    await updateLayoutConfig(activeLayout.id, updatedConfig);
+  };
+
+  const removeComponent = async (componentId: string) => {
+    if (!activeLayout) return;
+    
+    const updatedComponents = activeLayout.layout_config.components.filter((comp: any) => comp.id !== componentId);
+    const updatedConfig = { ...activeLayout.layout_config, components: updatedComponents };
+    await updateLayoutConfig(activeLayout.id, updatedConfig);
+  };
+
+  const createNewLayout = async () => {
+    const { data, error } = await supabase
+      .from('dashboard_layouts')
+      .insert([{
+        layout_name: `Ny Layout ${layouts.length + 1}`,
+        is_active: false,
+        layout_config: { components: [] },
+        theme_config: { 
+          primary_color: "hsl(var(--primary))",
+          background: "gradient",
+          card_style: "modern",
+          animation_enabled: true 
+        }
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      toast({ title: "Fel", description: "Kunde inte skapa layout", variant: "destructive" });
+    } else {
+      toast({ title: "Framgång", description: "Ny layout skapad!" });
+      loadLayouts();
+    }
+  };
+
+  const getComponentIcon = (type: string) => {
+    const iconMap: { [key: string]: string } = {
+      'stats_cards': '📊',
+      'latest_sale': '⭐',
+      'seller_circles': '👥',
+      'king_queen': '👑',
+      'daily_challenges': '🎯',
+      'top_sellers': '🏆',
+      'custom_text': '📝',
+      'custom_image': '🖼️',
+      'custom_video': '🎬'
+    };
+    return iconMap[type] || '📦';
+  };
+
+  const getComponentName = (type: string) => {
+    const nameMap: { [key: string]: string } = {
+      'stats_cards': 'Statistikkort',
+      'latest_sale': 'Senaste försäljning',
+      'seller_circles': 'Säljare cirklar',
+      'king_queen': 'Dagens Kung/Drottning',
+      'daily_challenges': 'Dagliga utmaningar',
+      'top_sellers': 'Topplista',
+      'custom_text': 'Egen text',
+      'custom_image': 'Egen bild',
+      'custom_video': 'Video/GIF'
+    };
+    return nameMap[type] || 'Okänd komponent';
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
@@ -380,10 +502,14 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="sellers" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="sellers" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Säljare
+            </TabsTrigger>
+            <TabsTrigger value="layout" className="flex items-center gap-2">
+              <Palette className="h-4 w-4" />
+              Layout Editor
             </TabsTrigger>
             <TabsTrigger value="goals" className="flex items-center gap-2">
               <Target className="h-4 w-4" />
@@ -530,6 +656,241 @@ const Admin = () => {
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Layout Editor Tab */}
+          <TabsContent value="layout" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Palette className="h-5 w-5" />
+                  Dashboard Layout Editor
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Dra och släpp komponenter för att anpassa dashboardens layout. Alla ändringar sparas automatiskt och syns direkt på dashboarden.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                
+                {/* Active Layout Selector */}
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50">
+                  <div>
+                    <h3 className="font-semibold">Aktiv Layout</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {activeLayout?.layout_name || 'Standard Layout'}
+                    </p>
+                  </div>
+                  <Button variant="outline" onClick={() => window.open('/dashboard', '_blank')}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Förhandsgranska
+                  </Button>
+                </div>
+
+                {/* Component Library */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Available Components */}
+                  <div className="lg:col-span-1">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2">
+                      <Plus className="h-4 w-4" />
+                      Tillgängliga komponenter
+                    </h3>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'stats', type: 'stats_cards', name: 'Statistikkort', icon: '📊' },
+                        { id: 'latest_sale', type: 'latest_sale', name: 'Senaste försäljning', icon: '⭐' },
+                        { id: 'seller_circles', type: 'seller_circles', name: 'Säljare cirklar', icon: '👥' },
+                        { id: 'king_queen', type: 'king_queen', name: 'Dagens Kung/Drottning', icon: '👑' },
+                        { id: 'challenges', type: 'daily_challenges', name: 'Dagliga utmaningar', icon: '🎯' },
+                        { id: 'top_list', type: 'top_sellers', name: 'Topplista', icon: '🏆' },
+                        { id: 'custom_text', type: 'custom_text', name: 'Egen text', icon: '📝' },
+                        { id: 'custom_image', type: 'custom_image', name: 'Egen bild', icon: '🖼️' },
+                        { id: 'custom_video', type: 'custom_video', name: 'Video/GIF', icon: '🎬' }
+                      ].map((component) => (
+                        <div
+                          key={component.id}
+                          className="p-3 border rounded-lg cursor-move hover:bg-accent transition-colors"
+                          draggable
+                          onDragStart={(e) => {
+                            setDraggedComponent(component);
+                            e.dataTransfer.effectAllowed = 'copy';
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{component.icon}</span>
+                            <span className="text-sm font-medium">{component.name}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Layout Canvas */}
+                  <div className="lg:col-span-2">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2">
+                      <Move className="h-4 w-4" />
+                      Dashboard Layout
+                    </h3>
+                    <div 
+                      className="min-h-96 border-2 border-dashed border-gray-300 rounded-lg p-4 space-y-3"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        if (draggedComponent && activeLayout) {
+                          const newComponent = {
+                            ...draggedComponent,
+                            order: (activeLayout.layout_config?.components?.length || 0) + 1,
+                            visible: true,
+                            size: 'full'
+                          };
+                          
+                          const updatedConfig = {
+                            ...activeLayout.layout_config,
+                            components: [...(activeLayout.layout_config?.components || []), newComponent]
+                          };
+                          
+                          await updateLayoutConfig(activeLayout.id, updatedConfig);
+                        }
+                        setDraggedComponent(null);
+                      }}
+                    >
+                      {activeLayout?.layout_config?.components?.length === 0 ? (
+                        <div className="text-center text-gray-500 py-12">
+                          <p>Dra komponenter hit för att bygga din layout</p>
+                        </div>
+                      ) : (
+                        activeLayout?.layout_config?.components
+                          ?.sort((a: any, b: any) => a.order - b.order)
+                          ?.map((component: any, index: number) => (
+                          <div
+                            key={`${component.id}-${index}`}
+                            className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Move className="h-4 w-4 text-gray-400 cursor-move" />
+                              <span>{getComponentIcon(component.type)}</span>
+                              <span className="font-medium">{getComponentName(component.type)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => toggleComponentVisibility(component.id)}
+                              >
+                                {component.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeComponent(component.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Theme Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Färger & Stil</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label>Färgtema</Label>
+                        <div className="grid grid-cols-4 gap-2 mt-2">
+                          {[
+                            { name: 'Blå', value: 'blue', color: 'bg-blue-500' },
+                            { name: 'Grön', value: 'green', color: 'bg-green-500' },
+                            { name: 'Lila', value: 'purple', color: 'bg-purple-500' },
+                            { name: 'Orange', value: 'orange', color: 'bg-orange-500' }
+                          ].map((theme) => (
+                            <div
+                              key={theme.value}
+                              className={`h-8 rounded cursor-pointer border-2 ${theme.color} ${
+                                activeLayout?.theme_config?.color_theme === theme.value ? 'border-gray-800' : 'border-gray-200'
+                              }`}
+                              onClick={() => updateThemeConfig('color_theme', theme.value)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label>Bakgrund</Label>
+                        <div className="space-y-1 mt-2">
+                          {[
+                            { name: 'Gradient', value: 'gradient' },
+                            { name: 'Enfärgad', value: 'solid' },
+                            { name: 'Mönster', value: 'pattern' }
+                          ].map((bg) => (
+                            <div
+                              key={bg.value}
+                              className={`p-2 text-sm rounded cursor-pointer border ${
+                                activeLayout?.theme_config?.background === bg.value ? 'bg-blue-100 border-blue-300' : 'border-gray-200'
+                              }`}
+                              onClick={() => updateThemeConfig('background', bg.value)}
+                            >
+                              {bg.name}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label>Kortstil</Label>
+                        <div className="space-y-1 mt-2">
+                          {[
+                            { name: 'Modern', value: 'modern' },
+                            { name: 'Klassisk', value: 'classic' },
+                            { name: 'Minimalistisk', value: 'minimal' }
+                          ].map((style) => (
+                            <div
+                              key={style.value}
+                              className={`p-2 text-sm rounded cursor-pointer border ${
+                                activeLayout?.theme_config?.card_style === style.value ? 'bg-blue-100 border-blue-300' : 'border-gray-200'
+                              }`}
+                              onClick={() => updateThemeConfig('card_style', style.value)}
+                            >
+                              {style.name}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <Label>Animationer</Label>
+                      <Switch
+                        checked={activeLayout?.theme_config?.animation_enabled !== false}
+                        onCheckedChange={(checked) => updateThemeConfig('animation_enabled', checked)}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Save Actions */}
+                <div className="flex justify-between items-center pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Ändringar sparas automatiskt och syns direkt på dashboarden
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={createNewLayout}>
+                      Skapa ny layout
+                    </Button>
+                    <Button onClick={() => window.open('/dashboard', '_blank')}>
+                      Visa dashboard
+                    </Button>
+                  </div>
+                </div>
+
               </CardContent>
             </Card>
           </TabsContent>
