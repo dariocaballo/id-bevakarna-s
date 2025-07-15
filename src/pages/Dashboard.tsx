@@ -43,6 +43,29 @@ const Dashboard = () => {
     loadSettings();
     loadChallenges();
     
+    // Försök aktivera AudioContext tidigt för att undvika browser-restriktioner
+    const initAudio = () => {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+        console.log('🎵 AudioContext initialized:', audioContext.state);
+      } catch (error) {
+        console.log('🎵 AudioContext not available');
+      }
+    };
+    
+    // Aktivera audio på första user interaction
+    const handleUserInteraction = () => {
+      initAudio();
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+    
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    
     // Listen for real-time updates
     const salesChannel = supabase
       .channel('dashboard-updates')
@@ -50,7 +73,7 @@ const Dashboard = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         async (payload) => {
-          console.log('Sales update:', payload);
+          console.log('🔊 Sales update received:', payload);
           if (payload.eventType === 'INSERT') {
             const newSale = payload.new as Sale;
             setLastSale(newSale);
@@ -59,20 +82,32 @@ const Dashboard = () => {
             const { data: currentSellers } = await supabase.from('sellers').select('*');
             const seller = currentSellers?.find(s => s.id === newSale.seller_id);
             
-            console.log('Playing sound for seller:', seller?.name, 'Sound URL:', seller?.sound_file_url);
+            console.log('🎵 Found seller:', seller?.name);
+            console.log('🎵 Sound URL:', seller?.sound_file_url);
+            console.log('🎵 Seller ID from sale:', newSale.seller_id);
             
             if (seller?.sound_file_url) {
               try {
+                console.log('🎵 Attempting to play custom sound...');
                 const audio = new Audio(seller.sound_file_url);
-                audio.volume = 0.7; // Sätt volym
-                await audio.play();
-                console.log('Successfully played custom sound for:', seller.name);
+                audio.volume = 0.8; // Höj volymen
+                audio.crossOrigin = 'anonymous'; // För CORS
+                
+                // Försök spela ljudet
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                  await playPromise;
+                  console.log('✅ Successfully played custom sound for:', seller.name);
+                } else {
+                  throw new Error('Play promise undefined');
+                }
               } catch (error) {
-                console.error('Error playing custom sound:', error);
+                console.error('❌ Error playing custom sound:', error);
+                console.log('🔄 Falling back to default applause...');
                 playApplauseSound(); // Fallback till standard
               }
             } else {
-              console.log('No custom sound found, playing default applause');
+              console.log('🔄 No custom sound found, playing default applause');
               playApplauseSound();
             }
           }
@@ -114,8 +149,10 @@ const Dashboard = () => {
     return () => {
       supabase.removeChannel(salesChannel);
       clearInterval(interval);
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
     };
-  }, [sellers]); // Re-run effect when sellers change
+  }, []); // Ta bort sellers dependency för att undvika re-subscriptions
 
   const loadSalesData = async () => {
     try {
