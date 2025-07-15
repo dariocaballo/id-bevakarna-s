@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus } from 'lucide-react';
-import { LayoutEditor } from '@/components/LayoutEditor';
+import { AdvancedLayoutEditor } from '@/components/AdvancedLayoutEditor';
 
 interface Seller {
   id: string;
@@ -663,7 +663,7 @@ const Admin = () => {
 
           {/* Layout Editor Tab */}
           <TabsContent value="layout" className="space-y-6">
-            <LayoutEditor />
+            <AdvancedLayoutEditor />
           </TabsContent>
 
           <TabsContent value="goals" className="space-y-6">
