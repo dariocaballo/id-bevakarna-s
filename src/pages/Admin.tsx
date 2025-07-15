@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus } from 'lucide-react';
-import { AdvancedLayoutEditor } from '@/components/AdvancedLayoutEditor';
+
 
 interface Seller {
   id: string;
@@ -51,9 +51,6 @@ const Admin = () => {
   const [newChallenge, setNewChallenge] = useState({ title: '', description: '', target_amount: 0 });
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<DailyChallenge | null>(null);
-  const [layouts, setLayouts] = useState<any[]>([]);
-  const [activeLayout, setActiveLayout] = useState<any>(null);
-  const [draggedComponent, setDraggedComponent] = useState<any>(null);
 
   // Authentication
   const handleLogin = () => {
@@ -78,7 +75,6 @@ const Admin = () => {
       loadSellers();
       loadChallenges();
       loadSettings();
-      loadLayouts();
     }
   }, [isAuthenticated]);
 
@@ -113,16 +109,6 @@ const Admin = () => {
     }
   };
 
-  const loadLayouts = async () => {
-    const { data, error } = await supabase.from('dashboard_layouts').select('*').order('created_at', { ascending: false });
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte ladda layouts", variant: "destructive" });
-    } else {
-      setLayouts(data || []);
-      const active = data?.find(layout => layout.is_active);
-      if (active) setActiveLayout(active);
-    }
-  };
 
   // Seller management
   const handleAddSeller = async () => {
@@ -347,112 +333,6 @@ const Admin = () => {
     window.URL.revokeObjectURL(url);
   };
 
-  // Layout management functions
-  const updateLayoutConfig = async (layoutId: string, newConfig: any) => {
-    const { error } = await supabase
-      .from('dashboard_layouts')
-      .update({ layout_config: newConfig })
-      .eq('id', layoutId);
-
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte uppdatera layout", variant: "destructive" });
-    } else {
-      setActiveLayout(prev => ({ ...prev, layout_config: newConfig }));
-      toast({ title: "Framgång", description: "Layout uppdaterad!" });
-      loadLayouts(); // Reload to get fresh data
-    }
-  };
-
-  const updateThemeConfig = async (key: string, value: any) => {
-    if (!activeLayout) return;
-    
-    const newThemeConfig = { ...activeLayout.theme_config, [key]: value };
-    const { error } = await supabase
-      .from('dashboard_layouts')
-      .update({ theme_config: newThemeConfig })
-      .eq('id', activeLayout.id);
-
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte uppdatera tema", variant: "destructive" });
-    } else {
-      setActiveLayout(prev => ({ ...prev, theme_config: newThemeConfig }));
-      toast({ title: "Framgång", description: "Tema uppdaterat!" });
-    }
-  };
-
-  const toggleComponentVisibility = async (componentId: string) => {
-    if (!activeLayout) return;
-    
-    const updatedComponents = activeLayout.layout_config.components.map((comp: any) =>
-      comp.id === componentId ? { ...comp, visible: !comp.visible } : comp
-    );
-    
-    const updatedConfig = { ...activeLayout.layout_config, components: updatedComponents };
-    await updateLayoutConfig(activeLayout.id, updatedConfig);
-  };
-
-  const removeComponent = async (componentId: string) => {
-    if (!activeLayout) return;
-    
-    const updatedComponents = activeLayout.layout_config.components.filter((comp: any) => comp.id !== componentId);
-    const updatedConfig = { ...activeLayout.layout_config, components: updatedComponents };
-    await updateLayoutConfig(activeLayout.id, updatedConfig);
-  };
-
-  const createNewLayout = async () => {
-    const { data, error } = await supabase
-      .from('dashboard_layouts')
-      .insert([{
-        layout_name: `Ny Layout ${layouts.length + 1}`,
-        is_active: false,
-        layout_config: { components: [] },
-        theme_config: { 
-          primary_color: "hsl(var(--primary))",
-          background: "gradient",
-          card_style: "modern",
-          animation_enabled: true 
-        }
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte skapa layout", variant: "destructive" });
-    } else {
-      toast({ title: "Framgång", description: "Ny layout skapad!" });
-      loadLayouts();
-    }
-  };
-
-  const getComponentIcon = (type: string) => {
-    const iconMap: { [key: string]: string } = {
-      'stats_cards': '📊',
-      'latest_sale': '⭐',
-      'seller_circles': '👥',
-      'king_queen': '👑',
-      'daily_challenges': '🎯',
-      'top_sellers': '🏆',
-      'custom_text': '📝',
-      'custom_image': '🖼️',
-      'custom_video': '🎬'
-    };
-    return iconMap[type] || '📦';
-  };
-
-  const getComponentName = (type: string) => {
-    const nameMap: { [key: string]: string } = {
-      'stats_cards': 'Statistikkort',
-      'latest_sale': 'Senaste försäljning',
-      'seller_circles': 'Säljare cirklar',
-      'king_queen': 'Dagens Kung/Drottning',
-      'daily_challenges': 'Dagliga utmaningar',
-      'top_sellers': 'Topplista',
-      'custom_text': 'Egen text',
-      'custom_image': 'Egen bild',
-      'custom_video': 'Video/GIF'
-    };
-    return nameMap[type] || 'Okänd komponent';
-  };
 
   if (!isAuthenticated) {
     return (
@@ -503,14 +383,10 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="sellers" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="sellers" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Säljare
-            </TabsTrigger>
-            <TabsTrigger value="layout" className="flex items-center gap-2">
-              <Palette className="h-4 w-4" />
-              Layout Editor
             </TabsTrigger>
             <TabsTrigger value="goals" className="flex items-center gap-2">
               <Target className="h-4 w-4" />
@@ -661,10 +537,6 @@ const Admin = () => {
             </Card>
           </TabsContent>
 
-          {/* Layout Editor Tab */}
-          <TabsContent value="layout" className="space-y-6">
-            <AdvancedLayoutEditor />
-          </TabsContent>
 
           <TabsContent value="goals" className="space-y-6">
             <Card>
