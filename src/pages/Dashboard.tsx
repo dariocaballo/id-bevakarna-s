@@ -204,15 +204,15 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg text-black font-bold">
+              <CardTitle className="text-lg text-slate-700 font-bold">
                 DAGENS TOTALA TB
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold text-black mb-1">
+              <div className="text-4xl font-bold text-blue-700 mb-1">
                 {formatCurrency(totalToday)}
               </div>
-              <p className="text-sm text-black">
+              <p className="text-sm text-slate-500">
                 Totalt idag
               </p>
             </CardContent>
@@ -220,15 +220,15 @@ const Dashboard = () => {
 
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg text-black font-bold">
+              <CardTitle className="text-lg text-slate-700 font-bold">
                 MÅNADENS TOTALA TB
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold text-black mb-1">
+              <div className="text-4xl font-bold text-blue-700 mb-1">
                 {formatCurrency(totalMonth)}
               </div>
-              <p className="text-sm text-black">
+              <p className="text-sm text-slate-500">
                 Totalt denna månad
               </p>
             </CardContent>
@@ -239,7 +239,7 @@ const Dashboard = () => {
         {todaysSellers.length > 0 && (
           <Card className="shadow-lg border-0 bg-white mb-6">
             <CardHeader>
-              <CardTitle className="text-xl text-black font-bold text-center">
+              <CardTitle className="text-xl text-slate-700 font-bold text-center">
                 Dagens försäljning per säljare
               </CardTitle>
             </CardHeader>
@@ -263,10 +263,10 @@ const Dashboard = () => {
                       </div>
                     </div>
                     <div className="text-center">
-                       <p className="font-semibold text-black text-sm mb-1">
+                       <p className="font-semibold text-slate-800 text-sm mb-1">
                          {seller.name}
                       </p>
-                      <p className="text-lg font-bold text-black">
+                      <p className="text-lg font-bold text-blue-700">
                         {formatCurrency(seller.amount)}
                       </p>
                     </div>
@@ -281,7 +281,7 @@ const Dashboard = () => {
         {topSellers.length > 0 && (
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader>
-              <CardTitle className="text-xl text-black font-bold text-center">
+              <CardTitle className="text-xl text-slate-700 font-bold text-center">
                 Månadens toppsäljare
               </CardTitle>
             </CardHeader>
@@ -307,19 +307,19 @@ const Dashboard = () => {
                         )}
                       </div>
                       <div>
-                         <p className="font-semibold text-black text-lg">
+                         <p className="font-semibold text-slate-800 text-lg">
                            {seller.name}
                         </p>
-                         <p className="text-sm text-black">
+                         <p className="text-sm text-slate-500">
                           Position #{index + 1}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-black">
+                      <p className="text-2xl font-bold text-blue-700">
                         {formatCurrency(seller.amount)}
                       </p>
-                      <p className="text-sm text-black">
+                      <p className="text-sm text-slate-500">
                         Total TB denna månad
                       </p>
                     </div>
