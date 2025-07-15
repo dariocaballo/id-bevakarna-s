@@ -196,17 +196,13 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="w-96 h-24 mx-auto mb-3 rounded-lg overflow-hidden">
+          <div className="w-96 h-24 mx-auto mb-3 rounded-lg overflow-hidden bg-white shadow-lg p-2">
             <img 
               src="/lovable-uploads/781f86e9-5c82-4c51-90da-581faec1654c.png" 
               alt="ID-Bevakarna" 
               className="w-full h-full object-contain"
             />
           </div>
-          <p className="text-lg text-blue-600">Live Säljdashboard</p>
-          <p className="text-sm text-blue-500 mt-1">
-            Uppdaterad: {new Date().toLocaleTimeString('sv-SE')}
-          </p>
         </div>
 
         {/* Dagens och Månadens totala TB */}
