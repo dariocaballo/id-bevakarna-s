@@ -196,13 +196,8 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="w-96 h-24 mx-auto mb-3 rounded-lg overflow-hidden bg-white shadow-lg p-2">
-            <img 
-              src="/lovable-uploads/781f86e9-5c82-4c51-90da-581faec1654c.png" 
-              alt="ID-Bevakarna" 
-              className="w-full h-full object-contain"
-            />
-          </div>
+          <h1 className="text-5xl font-bold text-slate-900 mb-2">ID-Bevakarna</h1>
+          <h2 className="text-2xl font-semibold text-blue-600">Sales Dashboard</h2>
         </div>
 
         {/* Dagens och Månadens totala TB */}
