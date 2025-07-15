@@ -204,15 +204,15 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg text-blue-800 font-bold">
+              <CardTitle className="text-lg text-black font-bold">
                 DAGENS TOTALA TB
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold text-blue-800 mb-1">
+              <div className="text-4xl font-bold text-black mb-1">
                 {formatCurrency(totalToday)}
               </div>
-              <p className="text-sm text-blue-600">
+              <p className="text-sm text-black">
                 Totalt idag
               </p>
             </CardContent>
@@ -220,15 +220,15 @@ const Dashboard = () => {
 
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg text-blue-800 font-bold">
+              <CardTitle className="text-lg text-black font-bold">
                 MÅNADENS TOTALA TB
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold text-blue-800 mb-1">
+              <div className="text-4xl font-bold text-black mb-1">
                 {formatCurrency(totalMonth)}
               </div>
-              <p className="text-sm text-blue-600">
+              <p className="text-sm text-black">
                 Totalt denna månad
               </p>
             </CardContent>
@@ -239,7 +239,7 @@ const Dashboard = () => {
         {todaysSellers.length > 0 && (
           <Card className="shadow-lg border-0 bg-white mb-6">
             <CardHeader>
-              <CardTitle className="text-xl text-blue-800 font-bold text-center">
+              <CardTitle className="text-xl text-black font-bold text-center">
                 Dagens försäljning per säljare
               </CardTitle>
             </CardHeader>
@@ -256,17 +256,17 @@ const Dashboard = () => {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <span className="text-2xl font-bold text-blue-800">
+                          <span className="text-2xl font-bold text-black">
                             {seller.name.charAt(0).toUpperCase()}
                           </span>
                         )}
                       </div>
                     </div>
                     <div className="text-center">
-                      <p className="font-semibold text-blue-800 text-sm mb-1">
-                        {seller.name}
+                       <p className="font-semibold text-black text-sm mb-1">
+                         {seller.name}
                       </p>
-                      <p className="text-lg font-bold text-blue-800">
+                      <p className="text-lg font-bold text-black">
                         {formatCurrency(seller.amount)}
                       </p>
                     </div>
@@ -281,7 +281,7 @@ const Dashboard = () => {
         {topSellers.length > 0 && (
           <Card className="shadow-lg border-0 bg-white">
             <CardHeader>
-              <CardTitle className="text-xl text-blue-800 font-bold text-center">
+              <CardTitle className="text-xl text-black font-bold text-center">
                 Månadens toppsäljare
               </CardTitle>
             </CardHeader>
@@ -301,25 +301,25 @@ const Dashboard = () => {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <span className="text-lg font-bold text-blue-800">
-                            {seller.name.charAt(0).toUpperCase()}
+                           <span className="text-lg font-bold text-black">
+                             {seller.name.charAt(0).toUpperCase()}
                           </span>
                         )}
                       </div>
                       <div>
-                        <p className="font-semibold text-blue-800 text-lg">
-                          {seller.name}
+                         <p className="font-semibold text-black text-lg">
+                           {seller.name}
                         </p>
-                        <p className="text-sm text-blue-600">
+                         <p className="text-sm text-black">
                           Position #{index + 1}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-blue-800">
+                      <p className="text-2xl font-bold text-black">
                         {formatCurrency(seller.amount)}
                       </p>
-                      <p className="text-sm text-blue-600">
+                      <p className="text-sm text-black">
                         Total TB denna månad
                       </p>
                     </div>
