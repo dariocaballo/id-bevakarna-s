@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, Calendar, Users, DollarSign, Trophy, Clock, Star } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
+import { playApplauseSound } from '@/utils/sound';
 
 interface Sale {
   id: string;
@@ -96,7 +97,18 @@ const Dashboard = () => {
         .slice(0, 5);
       
       setTopSellers(topSellersArray);
-      setChartData(topSellersArray);
+      
+      // Calculate today's sales for chart (different from topSellers which is monthly)
+      const todaysSellerTotals: { [key: string]: number } = {};
+      todaysSales.forEach((sale: Sale) => {
+        todaysSellerTotals[sale.seller_name] = (todaysSellerTotals[sale.seller_name] || 0) + sale.amount;
+      });
+      
+      const todaysChartData = Object.entries(todaysSellerTotals)
+        .map(([name, amount]) => ({ name, amount }))
+        .sort((a, b) => b.amount - a.amount);
+      
+      setChartData(todaysChartData);
       
       // Get last sale
       if (sales.length > 0) {
@@ -272,7 +284,7 @@ const Dashboard = () => {
             <CardHeader>
               <CardTitle className="text-xl text-primary flex items-center gap-2">
                 <Trophy className="w-6 h-6" />
-                Månadens försäljning per säljare
+                Dagens försäljning per säljare
               </CardTitle>
             </CardHeader>
             <CardContent>
