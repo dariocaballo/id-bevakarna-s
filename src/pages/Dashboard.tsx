@@ -335,29 +335,35 @@ const Dashboard = () => {
                 : 'grid-cols-1'
           }`}>
             
-            {/* Vänster kolumn - Dagens försäljning cirklar */}
+            {/* Dagens försäljning - Horisontell rangordning */}
             {todaysSellers.length > 0 && (
               <Card className="shadow-md border-0 bg-white overflow-hidden">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base text-slate-700 font-bold text-center">Dagens försäljning per säljare</CardTitle>
                 </CardHeader>
                 <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-wrap justify-center gap-4 px-2">
                     {todaysSellers.map((seller, index) => (
-                      <div key={seller.name} className="flex flex-col items-center space-y-1">
-                        <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-blue-300">
+                      <div key={seller.name} className="flex flex-col items-center space-y-2 min-w-[120px]">
+                        {/* Platsering ovanför cirkel */}
+                        <div className="flex items-center justify-center">
+                          <span className="text-lg font-bold">{getMedalIcon(index)}</span>
+                          <span className="text-sm font-bold text-slate-600 ml-1">#{index + 1}</span>
+                        </div>
+                        
+                        {/* Stor cirkel med profilbild */}
+                        <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-3 border-blue-300 shadow-lg hover:scale-105 transition-transform duration-200">
                           {seller.imageUrl ? (
                             <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
                           ) : (
-                            <span className="text-lg font-bold text-black">{seller.name.charAt(0).toUpperCase()}</span>
+                            <span className="text-2xl font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
                           )}
                         </div>
+                        
+                        {/* Namn och belopp under cirkel */}
                         <div className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-sm">{getMedalIcon(index)}</span>
-                            <p className="font-semibold text-slate-800 text-xs">{seller.name}</p>
-                          </div>
-                          <p className="text-sm font-bold text-blue-700">{formatCurrency(seller.amount)}</p>
+                          <p className="font-bold text-slate-800 text-sm leading-tight">{seller.name}</p>
+                          <p className="text-base font-bold text-blue-700 leading-tight">{formatCurrency(seller.amount)}</p>
                         </div>
                       </div>
                     ))}
