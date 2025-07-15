@@ -274,11 +274,9 @@ const Dashboard = () => {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
-      style: 'currency',
-      currency: 'SEK',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount);
+    }).format(amount) + ' tb';
   };
 
   const formatTime = (timestamp: string) => {
@@ -301,7 +299,7 @@ const Dashboard = () => {
   const shouldUseNightMode = settings.night_mode_enabled && isNightTime;
 
   return (
-    <div className={`min-h-screen p-4 ${shouldUseNightMode ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-br from-background via-accent/20 to-background'}`}>
+    <div className={`min-h-screen p-4 ${shouldUseNightMode ? 'bg-gradient-to-br from-slate-900/50 via-slate-800/50 to-slate-900/50' : 'bg-gradient-to-br from-background via-accent/20 to-background'}`}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -404,7 +402,7 @@ const Dashboard = () => {
           </Card>
         )}
 
-        {/* Stapeldiagram */}
+        {/* Säljare cirklar */}
         {chartData.length > 0 && (
           <Card className="card-shadow border-0 mb-8">
             <CardHeader>
@@ -414,37 +412,37 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                    <XAxis 
-                      dataKey="name" 
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                    />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                      tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-                    />
-                    <Tooltip 
-                      formatter={(value: number) => [formatCurrency(value), 'Försäljning']}
-                      labelStyle={{ color: 'hsl(var(--foreground))' }}
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '6px'
-                      }}
-                    />
-                    <Bar 
-                      dataKey="amount" 
-                      fill="hsl(var(--primary))"
-                      radius={[4, 4, 0, 0]}
-                      className="animate-fade-in"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                {chartData.map((data) => {
+                  const seller = sellers.find(s => s.name === data.name);
+                  return (
+                    <div key={data.name} className="flex flex-col items-center space-y-3 animate-fade-in">
+                      <div className="relative">
+                        <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden border-4 border-primary/30 hover:scale-105 transition-transform duration-200">
+                          {seller?.profile_image_url ? (
+                            <img 
+                              src={seller.profile_image_url} 
+                              alt={data.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-2xl font-bold text-primary">
+                              {data.name.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-semibold text-foreground text-sm mb-1">
+                          {data.name}
+                        </p>
+                        <p className="text-lg font-bold text-primary">
+                          {formatCurrency(data.amount)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -544,10 +542,19 @@ const Dashboard = () => {
                             className="w-12 h-12 rounded-full object-cover border-2 border-primary/20"
                           />
                         )}
-                        <div className="flex-1">
-                          <p className="text-lg font-semibold text-foreground">
-                            {seller.name}
-                          </p>
+                       <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-lg font-semibold text-foreground">
+                              {seller.name}
+                            </p>
+                            {seller.imageUrl && (
+                              <img 
+                                src={seller.imageUrl} 
+                                alt={seller.name}
+                                className="w-8 h-8 rounded-full object-cover border border-primary/20"
+                              />
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground">
                             Säljare
                           </p>

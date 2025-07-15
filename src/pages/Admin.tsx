@@ -420,7 +420,7 @@ const Admin = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="monthly-goal">Månatligt mål (kr)</Label>
+                    <Label htmlFor="monthly-goal">Månatligt mål (tb)</Label>
                     <Input
                       id="monthly-goal"
                       type="number"
@@ -470,7 +470,7 @@ const Admin = () => {
                               onChange={(e) => setEditingSeller(prev => prev ? { ...prev, monthly_goal: Number(e.target.value) } : null)}
                             />
                           ) : (
-                            `${seller.monthly_goal.toLocaleString()} kr`
+                            `${seller.monthly_goal.toLocaleString()} tb`
                           )}
                         </TableCell>
                         <TableCell>
@@ -572,7 +572,7 @@ const Admin = () => {
                     {sellers.map((seller) => (
                       <TableRow key={seller.id}>
                         <TableCell>{seller.name}</TableCell>
-                        <TableCell>{seller.monthly_goal.toLocaleString()} kr</TableCell>
+                        <TableCell>{seller.monthly_goal.toLocaleString()} tb</TableCell>
                         <TableCell>Beräknas dynamiskt</TableCell>
                         <TableCell>
                           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -599,7 +599,7 @@ const Admin = () => {
                     id="challenge-title"
                     value={newChallenge.title}
                     onChange={(e) => setNewChallenge(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="T.ex. Första till 5000 kr"
+                    placeholder="T.ex. Första till 5000 tb"
                   />
                 </div>
                 <div>
@@ -612,7 +612,7 @@ const Admin = () => {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="challenge-amount">Målbelopp (kr)</Label>
+                  <Label htmlFor="challenge-amount">Målbelopp (tb)</Label>
                   <Input
                     id="challenge-amount"
                     type="number"
@@ -671,7 +671,7 @@ const Admin = () => {
                               onChange={(e) => setEditingChallenge(prev => prev ? { ...prev, target_amount: Number(e.target.value) } : null)}
                             />
                           ) : (
-                            `${challenge.target_amount.toLocaleString()} kr`
+                            `${challenge.target_amount.toLocaleString()} tb`
                           )}
                         </TableCell>
                         <TableCell>

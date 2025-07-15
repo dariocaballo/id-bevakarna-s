@@ -97,7 +97,7 @@ const Seller = () => {
     if (isNaN(numericAmount) || numericAmount <= 0) {
       toast({
         title: "Ogiltigt belopp",
-        description: "Ange ett giltigt belopp i kronor.",
+        description: "Ange ett giltigt belopp i tb.",
         variant: "destructive"
       });
       return;
@@ -137,7 +137,7 @@ const Seller = () => {
 
       toast({
         title: "Försäljning rapporterad! 🎉",
-        description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} kr`,
+        description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} tb`,
         className: "success-gradient text-white border-success"
       });
 
@@ -188,11 +188,9 @@ const Seller = () => {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
-      style: 'currency',
-      currency: 'SEK',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount);
+    }).format(amount) + ' tb';
   };
 
   const formatTime = (timestamp: string) => {
@@ -258,7 +256,7 @@ const Seller = () => {
               <div className="space-y-2">
                 <Label htmlFor="amount" className="text-sm font-medium flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-primary" />
-                  Belopp (kr)
+                  Belopp (tb)
                 </Label>
                 <Input
                   id="amount"
