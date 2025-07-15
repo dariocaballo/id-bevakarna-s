@@ -37,9 +37,34 @@ const Seller = () => {
     loadSellers();
     loadRecentSales();
     
+    // Real-time listeners for sellers and sales
+    const sellersChannel = supabase
+      .channel('seller-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellers' },
+        (payload) => {
+          console.log('Seller update:', payload);
+          loadSellers(); // Reload sellers when changes occur
+        }
+      )
+      .on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'sales' },
+        (payload) => {
+          console.log('Sales update:', payload);
+          loadRecentSales(); // Reload recent sales when changes occur
+        }
+      )
+      .subscribe();
+    
     // Auto-refresh recent sales every 10 seconds
     const interval = setInterval(loadRecentSales, 10000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      supabase.removeChannel(sellersChannel);
+      clearInterval(interval);
+    };
   }, []);
 
   const loadSellers = async () => {
@@ -233,18 +258,26 @@ const Seller = () => {
                   <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
                     <SelectValue placeholder="Välj säljare" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border border-gray-200 shadow-lg z-50 max-h-60 overflow-y-auto">
                     {sellers.map((seller) => (
-                      <SelectItem key={seller.id} value={seller.id}>
-                        <div className="flex items-center gap-2">
-                          {seller.profile_image_url && (
+                      <SelectItem 
+                        key={seller.id} 
+                        value={seller.id}
+                        className="cursor-pointer hover:bg-blue-50 focus:bg-blue-50"
+                      >
+                        <div className="flex items-center gap-2 w-full">
+                          {seller.profile_image_url ? (
                             <img 
                               src={seller.profile_image_url} 
                               alt={seller.name} 
-                              className="w-6 h-6 rounded-full"
+                              className="w-6 h-6 rounded-full object-cover border border-gray-200"
                             />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-800">
+                              {seller.name.charAt(0).toUpperCase()}
+                            </div>
                           )}
-                          {seller.name}
+                          <span className="font-medium text-gray-900">{seller.name}</span>
                         </div>
                       </SelectItem>
                     ))}

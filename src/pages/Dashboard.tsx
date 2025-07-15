@@ -70,10 +70,10 @@ const Dashboard = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
-        () => {
-          console.log('Sellers update');
+        (payload) => {
+          console.log('Sellers update:', payload);
           loadSellers();
-          loadSalesData();
+          loadSalesData(); // Reload sales data when sellers change
         }
       )
       .on(
@@ -103,7 +103,7 @@ const Dashboard = () => {
       supabase.removeChannel(salesChannel);
       clearInterval(interval);
     };
-  }, [sellers]);
+  }, [sellers]); // Re-run effect when sellers change
 
   const loadSalesData = async () => {
     try {

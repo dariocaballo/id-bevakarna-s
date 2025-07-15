@@ -117,43 +117,63 @@ const Admin = () => {
       return;
     }
 
-    const { error } = await supabase.from('sellers').insert([{
-      name: newSeller.name,
-      monthly_goal: newSeller.monthly_goal
-    }]);
+    try {
+      const { data, error } = await supabase.from('sellers').insert([{
+        name: newSeller.name.trim(),
+        monthly_goal: newSeller.monthly_goal || 0
+      }]).select().single();
 
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte lägga till säljare", variant: "destructive" });
-    } else {
-      toast({ title: "Framgång", description: "Säljare tillagd!" });
+      if (error) throw error;
+
+      toast({ title: "Framgång", description: "Säljare tillagd! Du kan nu ladda upp profilbild och ljud." });
       setNewSeller({ name: '', monthly_goal: 0 });
       loadSellers();
+    } catch (error) {
+      console.error('Error adding seller:', error);
+      toast({ title: "Fel", description: "Kunde inte lägga till säljare", variant: "destructive" });
     }
   };
 
   const handleUpdateSeller = async (seller: Seller) => {
-    const { error } = await supabase.from('sellers').update({
-      name: seller.name,
-      monthly_goal: seller.monthly_goal
-    }).eq('id', seller.id);
+    try {
+      const { error } = await supabase.from('sellers').update({
+        name: seller.name.trim(),
+        monthly_goal: seller.monthly_goal || 0
+      }).eq('id', seller.id);
 
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte uppdatera säljare", variant: "destructive" });
-    } else {
+      if (error) throw error;
+
       toast({ title: "Framgång", description: "Säljare uppdaterad!" });
       setEditingSeller(null);
       loadSellers();
+    } catch (error) {
+      console.error('Error updating seller:', error);
+      toast({ title: "Fel", description: "Kunde inte uppdatera säljare", variant: "destructive" });
     }
   };
 
   const handleDeleteSeller = async (sellerId: string) => {
-    const { error } = await supabase.from('sellers').delete().eq('id', sellerId);
+    try {
+      // First delete all sales by this seller
+      const { error: salesError } = await supabase
+        .from('sales')
+        .delete()
+        .eq('seller_id', sellerId);
 
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte ta bort säljare", variant: "destructive" });
-    } else {
-      toast({ title: "Framgång", description: "Säljare borttagen!" });
+      if (salesError) {
+        console.warn('Error deleting sales:', salesError);
+      }
+
+      // Then delete the seller
+      const { error } = await supabase.from('sellers').delete().eq('id', sellerId);
+
+      if (error) throw error;
+
+      toast({ title: "Framgång", description: "Säljare och all relaterad data borttagen!" });
       loadSellers();
+    } catch (error) {
+      console.error('Error deleting seller:', error);
+      toast({ title: "Fel", description: "Kunde inte ta bort säljare", variant: "destructive" });
     }
   };
 
@@ -244,62 +264,68 @@ const Admin = () => {
 
   // File upload handlers
   const handleProfileImageUpload = async (sellerId: string, file: File) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${sellerId}.${fileExt}`;
-    const filePath = `profiles/${fileName}`;
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${sellerId}.${fileExt}`;
+      const filePath = `profiles/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('seller-profiles')
-      .upload(filePath, file, { upsert: true });
+      // Upload file
+      const { error: uploadError } = await supabase.storage
+        .from('seller-profiles')
+        .upload(filePath, file, { upsert: true });
 
-    if (uploadError) {
-      toast({ title: "Fel", description: "Kunde inte ladda upp bild", variant: "destructive" });
-      return;
-    }
+      if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('seller-profiles')
-      .getPublicUrl(filePath);
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('seller-profiles')
+        .getPublicUrl(filePath);
 
-    const { error: updateError } = await supabase.from('sellers')
-      .update({ profile_image_url: publicUrl })
-      .eq('id', sellerId);
+      // Update seller record
+      const { error: updateError } = await supabase.from('sellers')
+        .update({ profile_image_url: publicUrl })
+        .eq('id', sellerId);
 
-    if (updateError) {
-      toast({ title: "Fel", description: "Kunde inte uppdatera profilbild", variant: "destructive" });
-    } else {
+      if (updateError) throw updateError;
+
       toast({ title: "Framgång", description: "Profilbild uppladdad!" });
       loadSellers();
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      toast({ title: "Fel", description: "Kunde inte ladda upp profilbild", variant: "destructive" });
     }
   };
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${sellerId}.${fileExt}`;
-    const filePath = `sounds/${fileName}`;
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${sellerId}.${fileExt}`;
+      const filePath = `sounds/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('seller-sounds')
-      .upload(filePath, file, { upsert: true });
+      // Upload file
+      const { error: uploadError } = await supabase.storage
+        .from('seller-sounds')
+        .upload(filePath, file, { upsert: true });
 
-    if (uploadError) {
-      toast({ title: "Fel", description: "Kunde inte ladda upp ljud", variant: "destructive" });
-      return;
-    }
+      if (uploadError) throw uploadError;
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('seller-sounds')
-      .getPublicUrl(filePath);
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('seller-sounds')
+        .getPublicUrl(filePath);
 
-    const { error: updateError } = await supabase.from('sellers')
-      .update({ sound_file_url: publicUrl })
-      .eq('id', sellerId);
+      // Update seller record
+      const { error: updateError } = await supabase.from('sellers')
+        .update({ sound_file_url: publicUrl })
+        .eq('id', sellerId);
 
-    if (updateError) {
-      toast({ title: "Fel", description: "Kunde inte uppdatera ljudfil", variant: "destructive" });
-    } else {
+      if (updateError) throw updateError;
+
       toast({ title: "Framgång", description: "Ljudfil uppladdad!" });
       loadSellers();
+    } catch (error) {
+      console.error('Error uploading sound file:', error);
+      toast({ title: "Fel", description: "Kunde inte ladda upp ljudfil", variant: "destructive" });
     }
   };
 
