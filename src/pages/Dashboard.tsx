@@ -88,23 +88,41 @@ const Dashboard = () => {
             
             if (seller?.sound_file_url) {
               try {
-                console.log('🎵 Attempting to play custom sound...');
+                console.log('🎵 Playing sound:', seller.sound_file_url);
                 const audio = new Audio(seller.sound_file_url);
-                audio.volume = 0.8; // Höj volymen
+                audio.volume = 1; // Full volym som begärt
                 audio.crossOrigin = 'anonymous'; // För CORS
                 
-                // Försök spela ljudet
+                // Säkerställ att ljudet är laddat innan uppspelning
+                audio.addEventListener('loadeddata', () => {
+                  console.log('🎵 Audio loaded, ready to play');
+                });
+                
+                audio.addEventListener('error', (e) => {
+                  console.error('🎵 Audio load error:', e);
+                  console.error('🎵 Error details:', audio.error);
+                });
+                
+                // Försök spela ljudet direkt
                 const playPromise = audio.play();
                 if (playPromise !== undefined) {
-                  await playPromise;
-                  console.log('✅ Successfully played custom sound for:', seller.name);
+                  playPromise
+                    .then(() => {
+                      console.log('✅ Successfully played custom sound for:', seller.name);
+                    })
+                    .catch((error) => {
+                      console.error('❌ Play failed:', error);
+                      console.log('🔄 Falling back to default applause...');
+                      playApplauseSound();
+                    });
                 } else {
-                  throw new Error('Play promise undefined');
+                  console.error('❌ Play promise undefined');
+                  playApplauseSound();
                 }
               } catch (error) {
-                console.error('❌ Error playing custom sound:', error);
+                console.error('❌ Error creating/playing audio:', error);
                 console.log('🔄 Falling back to default applause...');
-                playApplauseSound(); // Fallback till standard
+                playApplauseSound();
               }
             } else {
               console.log('🔄 No custom sound found, playing default applause');
