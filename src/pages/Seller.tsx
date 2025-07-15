@@ -5,14 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { TrendingUp, User, DollarSign, CheckCircle, Trash2, Clock } from 'lucide-react';
-import logoImage from '@/assets/id-bevakarna-logo.png';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Sale {
   id: string;
-  sellerName: string;
+  seller_name: string;
   amount: number;
   timestamp: string;
-  date: string;
 }
 
 const Seller = () => {
@@ -30,14 +29,24 @@ const Seller = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const loadRecentSales = () => {
-    const existingSales = JSON.parse(localStorage.getItem('sales') || '[]');
-    const today = new Date().toDateString();
-    const todaysSales = existingSales
-      .filter((sale: Sale) => sale.date === today)
-      .sort((a: Sale, b: Sale) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 5);
-    setRecentSales(todaysSales);
+  const loadRecentSales = async () => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*')
+        .gte('timestamp', today.toISOString())
+        .order('timestamp', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      
+      setRecentSales(data || []);
+    } catch (error) {
+      console.error('Error loading sales:', error);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,23 +74,26 @@ const Seller = () => {
     setIsSubmitting(true);
 
     try {
-      // Här kommer Supabase-integrationen att användas
-      // För nu simulerar vi med localStorage för demo
-      const sale = {
-        id: Date.now().toString(),
-        sellerName: sellerName.trim(),
-        amount: numericAmount,
-        timestamp: new Date().toISOString(),
-        date: new Date().toDateString()
-      };
+      // Save to Supabase
+      const { data, error } = await supabase
+        .from('sales')
+        .insert([
+          {
+            seller_name: sellerName.trim(),
+            amount: numericAmount
+          }
+        ])
+        .select()
+        .single();
 
-      // Lägg till i localStorage (temporär lösning tills Supabase)
-      const existingSales = JSON.parse(localStorage.getItem('sales') || '[]');
-      existingSales.push(sale);
-      localStorage.setItem('sales', JSON.stringify(existingSales));
+      if (error) throw error;
 
-      // Trigger custom event för realtidsuppdatering
-      window.dispatchEvent(new CustomEvent('newSale', { detail: sale }));
+      // Play applause sound
+      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1+y/ayEFJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCw==');
+      audio.volume = 0.3;
+      audio.play().catch(() => {
+        // Ignore audio play errors (autoplay restrictions)
+      });
 
       toast({
         title: "Försäljning rapporterad! 🎉",
@@ -109,12 +121,12 @@ const Seller = () => {
 
   const handleDeleteSale = async (saleId: string) => {
     try {
-      const existingSales = JSON.parse(localStorage.getItem('sales') || '[]');
-      const updatedSales = existingSales.filter((sale: Sale) => sale.id !== saleId);
-      localStorage.setItem('sales', JSON.stringify(updatedSales));
-      
-      // Trigger custom event for real-time updates
-      window.dispatchEvent(new CustomEvent('saleDeleted', { detail: saleId }));
+      const { error } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', saleId);
+
+      if (error) throw error;
       
       toast({
         title: "Försäljning borttagen",
@@ -157,7 +169,7 @@ const Seller = () => {
         <div className="text-center mb-8">
           <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white p-2 card-shadow">
             <img 
-              src={logoImage} 
+              src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
               alt="ID-Bevakarna" 
               className="w-full h-full object-contain"
             />
@@ -243,7 +255,7 @@ const Seller = () => {
                 {recentSales.map((sale) => (
                   <div key={sale.id} className="flex items-center justify-between p-3 rounded-lg bg-accent/10 smooth-transition hover:bg-accent/20">
                     <div className="flex-1">
-                      <p className="font-medium text-foreground">{sale.sellerName}</p>
+                      <p className="font-medium text-foreground">{sale.seller_name}</p>
                       <p className="text-sm text-muted-foreground flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {formatTime(sale.timestamp)} • {formatCurrency(sale.amount)}
