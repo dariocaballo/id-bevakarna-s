@@ -196,7 +196,7 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-6">
-          <h1 className="text-5xl font-bold text-slate-900 mb-2">ID-Bevakarna</h1>
+          <h1 className="text-5xl font-bold text-blue-800 mb-2">ID-Bevakarna</h1>
           <h2 className="text-2xl font-semibold text-blue-600">Sales Dashboard</h2>
         </div>
 
