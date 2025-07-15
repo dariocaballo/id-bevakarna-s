@@ -19,6 +19,14 @@ interface Seller {
   monthly_goal: number;
 }
 
+interface DailyChallenge {
+  id: string;
+  title: string;
+  description: string;
+  target_amount: number;
+  is_active: boolean;
+}
+
 const Dashboard = () => {
   const [totalToday, setTotalToday] = useState(0);
   const [totalMonth, setTotalMonth] = useState(0);
@@ -26,10 +34,14 @@ const Dashboard = () => {
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [todaysSellers, setTodaysSellers] = useState<{name: string, amount: number, imageUrl?: string}[]>([]);
+  const [settings, setSettings] = useState<{ [key: string]: any }>({});
+  const [activeChallenges, setActiveChallenges] = useState<DailyChallenge[]>([]);
 
   useEffect(() => {
     loadSalesData();
     loadSellers();
+    loadSettings();
+    loadChallenges();
     
     // Listen for real-time updates
     const salesChannel = supabase
@@ -62,6 +74,22 @@ const Dashboard = () => {
           console.log('Sellers update');
           loadSellers();
           loadSalesData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dashboard_settings' },
+        () => {
+          console.log('Settings update');
+          loadSettings();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_challenges' },
+        () => {
+          console.log('Challenges update');
+          loadChallenges();
         }
       )
       .subscribe();
@@ -173,6 +201,34 @@ const Dashboard = () => {
     }
   };
 
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase.from('dashboard_settings').select('*');
+      if (error) throw error;
+      
+      const settingsObj: { [key: string]: any } = {};
+      data?.forEach(setting => {
+        settingsObj[setting.setting_key] = setting.setting_value;
+      });
+      setSettings(settingsObj);
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
+
+  const loadChallenges = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('daily_challenges')
+        .select('*')
+        .eq('is_active', true);
+      if (error) throw error;
+      setActiveChallenges(data || []);
+    } catch (error) {
+      console.error('Error loading challenges:', error);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
       minimumFractionDigits: 0,
@@ -191,13 +247,28 @@ const Dashboard = () => {
     }
   };
 
+  // Check if night mode is active
+  const isNightTime = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    return settings.night_mode_enabled === 'true' && (hour >= 18 || hour <= 9);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4">
+    <div className={`min-h-screen p-4 ${
+      isNightTime() 
+        ? 'bg-gradient-to-br from-slate-800 to-slate-900' 
+        : 'bg-gradient-to-br from-blue-50 to-blue-100'
+    }`}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-6">
-          <h1 className="text-5xl font-bold text-blue-800 mb-2">ID-Bevakarna</h1>
-          <h2 className="text-2xl font-semibold text-blue-600">Sales Dashboard</h2>
+          <h1 className={`text-5xl font-bold mb-2 ${
+            isNightTime() ? 'text-white' : 'text-blue-800'
+          }`}>ID-Bevakarna</h1>
+          <h2 className={`text-2xl font-semibold ${
+            isNightTime() ? 'text-slate-300' : 'text-blue-600'
+          }`}>Sales Dashboard</h2>
         </div>
 
         {/* Dagens och Månadens totala TB */}
@@ -262,20 +333,149 @@ const Dashboard = () => {
                         )}
                       </div>
                     </div>
-                    <div className="text-center">
-                       <p className="font-semibold text-slate-800 text-sm mb-1">
-                         {seller.name}
-                      </p>
-                      <p className="text-lg font-bold text-blue-700">
-                        {formatCurrency(seller.amount)}
-                      </p>
-                    </div>
+                     <div className="text-center">
+                       <div className="flex items-center justify-center mb-1">
+                         <span className="text-2xl mr-1">{getMedalIcon(index)}</span>
+                         <p className="font-semibold text-slate-800 text-sm">
+                           {seller.name}
+                         </p>
+                       </div>
+                       <p className="text-lg font-bold text-blue-700">
+                         {formatCurrency(seller.amount)}
+                       </p>
+                     </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
-        )}
+         )}
+
+         {/* Aktiva utmaningar */}
+         {activeChallenges.length > 0 && settings.challenges_enabled === 'true' && (
+           <Card className="shadow-lg border-0 bg-white mb-6">
+             <CardHeader>
+               <CardTitle className="text-xl text-slate-700 font-bold text-center">
+                 Dagliga utmaningar
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <div className="space-y-4">
+                 {activeChallenges.map((challenge) => (
+                   <div key={challenge.id} className="p-4 rounded-lg bg-yellow-50 border-2 border-yellow-200">
+                     <h3 className="text-lg font-bold text-slate-800 mb-2">{challenge.title}</h3>
+                     <p className="text-slate-600 mb-3">{challenge.description}</p>
+                     <div className="flex items-center justify-between">
+                       <span className="text-sm text-slate-500">Målbelopp:</span>
+                       <span className="text-lg font-bold text-blue-700">{formatCurrency(challenge.target_amount)}</span>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </CardContent>
+           </Card>
+         )}
+
+         {/* Dagens Kung/Drottning */}
+         {settings.king_queen_enabled === 'true' && todaysSellers.length > 0 && (
+           <Card className="shadow-lg border-0 bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-300 mb-6">
+             <CardHeader>
+               <CardTitle className="text-xl text-slate-700 font-bold text-center flex items-center justify-center gap-2">
+                 <span className="text-2xl">👑</span>
+                 Dagens Kung/Drottning
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <div className="flex items-center justify-center">
+                 <div className="flex flex-col items-center space-y-3">
+                   <div className="relative">
+                     <div className="w-32 h-32 rounded-full bg-yellow-100 flex items-center justify-center overflow-hidden border-4 border-yellow-400 shadow-lg">
+                       {todaysSellers[0].imageUrl ? (
+                         <img 
+                           src={todaysSellers[0].imageUrl} 
+                           alt={todaysSellers[0].name}
+                           className="w-full h-full object-cover"
+                         />
+                       ) : (
+                         <span className="text-4xl font-bold text-slate-800">
+                           {todaysSellers[0].name.charAt(0).toUpperCase()}
+                         </span>
+                       )}
+                     </div>
+                     <div className="absolute -top-2 -right-2 text-4xl">👑</div>
+                   </div>
+                   <div className="text-center">
+                     <h3 className="text-2xl font-bold text-slate-800 mb-1">{todaysSellers[0].name}</h3>
+                     <p className="text-xl font-bold text-yellow-600">
+                       {formatCurrency(todaysSellers[0].amount)}
+                     </p>
+                     <p className="text-sm text-slate-600 mt-1">Dagens bästa försäljare</p>
+                   </div>
+                 </div>
+               </div>
+             </CardContent>
+           </Card>
+         )}
+
+         {/* Säljmål progressbars */}
+         {settings.goals_enabled === 'true' && sellers.filter(s => s.monthly_goal > 0).length > 0 && (
+           <Card className="shadow-lg border-0 bg-white mb-6">
+             <CardHeader>
+               <CardTitle className="text-xl text-slate-700 font-bold text-center">
+                 Månadens säljmål
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <div className="space-y-4">
+                 {sellers.filter(seller => seller.monthly_goal > 0).map((seller) => {
+                   const sellerMonthSales = topSellers.find(s => s.name === seller.name)?.amount || 0;
+                   const progress = Math.min((sellerMonthSales / seller.monthly_goal) * 100, 100);
+                   
+                   return (
+                     <div key={seller.id} className="p-4 rounded-lg bg-blue-50">
+                       <div className="flex items-center justify-between mb-2">
+                         <div className="flex items-center gap-3">
+                           {seller.profile_image_url ? (
+                             <img 
+                               src={seller.profile_image_url} 
+                               alt={seller.name}
+                               className="w-8 h-8 rounded-full object-cover"
+                             />
+                           ) : (
+                             <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center">
+                               <span className="text-sm font-bold text-slate-800">
+                                 {seller.name.charAt(0).toUpperCase()}
+                               </span>
+                             </div>
+                           )}
+                           <span className="font-semibold text-slate-800">{seller.name}</span>
+                         </div>
+                         <div className="text-right">
+                           <div className="text-sm text-slate-600">
+                             {formatCurrency(sellerMonthSales)} / {formatCurrency(seller.monthly_goal)}
+                           </div>
+                           <div className="text-xs text-slate-500">
+                             {progress.toFixed(1)}% av målet
+                           </div>
+                         </div>
+                       </div>
+                       <div className="w-full bg-gray-200 rounded-full h-3">
+                         <div 
+                           className={`h-3 rounded-full transition-all duration-500 ease-out ${
+                             progress >= 100 ? 'bg-green-500' : progress >= 75 ? 'bg-blue-500' : progress >= 50 ? 'bg-yellow-500' : 'bg-red-400'
+                           }`}
+                           style={{ width: `${progress}%` }}
+                         />
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+             </CardContent>
+           </Card>
+         )}
+
+        
 
         {/* Månadens toppsäljare */}
         {topSellers.length > 0 && (
