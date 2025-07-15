@@ -14,11 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_challenges: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean | null
+          target_amount: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          is_active?: boolean | null
+          target_amount: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean | null
+          target_amount?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      dashboard_settings: {
+        Row: {
+          created_at: string
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          setting_key: string
+          setting_value: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sales: {
         Row: {
           amount: number
           created_at: string
           id: string
+          seller_id: string | null
           seller_name: string
           timestamp: string
           updated_at: string
@@ -27,6 +82,7 @@ export type Database = {
           amount: number
           created_at?: string
           id?: string
+          seller_id?: string | null
           seller_name: string
           timestamp?: string
           updated_at?: string
@@ -35,8 +91,47 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          seller_id?: string | null
           seller_name?: string
           timestamp?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "sellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sellers: {
+        Row: {
+          created_at: string
+          id: string
+          monthly_goal: number | null
+          name: string
+          profile_image_url: string | null
+          sound_file_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          monthly_goal?: number | null
+          name: string
+          profile_image_url?: string | null
+          sound_file_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          monthly_goal?: number | null
+          name?: string
+          profile_image_url?: string | null
+          sound_file_url?: string | null
           updated_at?: string
         }
         Relationships: []
