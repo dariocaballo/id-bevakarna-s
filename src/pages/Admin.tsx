@@ -208,12 +208,31 @@ const Admin = () => {
 
   // Settings management
   const handleSettingChange = async (key: string, value: any) => {
-    const { error } = await supabase.from('dashboard_settings').upsert({
-      setting_key: key,
-      setting_value: value
-    });
+    // First check if setting exists
+    const { data: existing } = await supabase
+      .from('dashboard_settings')
+      .select('id')
+      .eq('setting_key', key)
+      .single();
+
+    let error;
+    if (existing) {
+      // Update existing setting
+      const { error: updateError } = await supabase
+        .from('dashboard_settings')
+        .update({ setting_value: value })
+        .eq('setting_key', key);
+      error = updateError;
+    } else {
+      // Insert new setting
+      const { error: insertError } = await supabase
+        .from('dashboard_settings')
+        .insert({ setting_key: key, setting_value: value });
+      error = insertError;
+    }
 
     if (error) {
+      console.error('Setting update error:', error);
       toast({ title: "Fel", description: "Kunde inte uppdatera inställning", variant: "destructive" });
     } else {
       setSettings(prev => ({ ...prev, [key]: value }));
