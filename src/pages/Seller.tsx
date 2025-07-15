@@ -3,31 +3,63 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { TrendingUp, User, DollarSign, CheckCircle, Trash2, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { playApplauseSound } from '@/utils/sound';
 
 interface Sale {
   id: string;
   seller_name: string;
+  seller_id?: string;
   amount: number;
   timestamp: string;
 }
 
+interface Seller {
+  id: string;
+  name: string;
+  profile_image_url?: string;
+  sound_file_url?: string;
+  monthly_goal: number;
+}
+
 const Seller = () => {
-  const [sellerName, setSellerName] = useState('');
+  const [sellers, setSellers] = useState<Seller[]>([]);
+  const [selectedSellerId, setSelectedSellerId] = useState('');
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
+    loadSellers();
     loadRecentSales();
     
     // Auto-refresh recent sales every 10 seconds
     const interval = setInterval(loadRecentSales, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const loadSellers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sellers')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setSellers(data || []);
+    } catch (error) {
+      console.error('Error loading sellers:', error);
+      toast({
+        title: "Fel",
+        description: "Kunde inte ladda säljare",
+        variant: "destructive",
+      });
+    }
+  };
 
   const loadRecentSales = async () => {
     try {
@@ -52,10 +84,10 @@ const Seller = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!sellerName.trim() || !amount.trim()) {
+    if (!selectedSellerId || !amount.trim()) {
       toast({
         title: "Fyll i alla fält",
-        description: "Både namn och belopp krävs för att rapportera försäljning.",
+        description: "Både säljare och belopp krävs för att rapportera försäljning.",
         variant: "destructive"
       });
       return;
@@ -74,12 +106,15 @@ const Seller = () => {
     setIsSubmitting(true);
 
     try {
+      const selectedSeller = sellers.find(s => s.id === selectedSellerId);
+      
       // Save to Supabase
       const { data, error } = await supabase
         .from('sales')
         .insert([
           {
-            seller_name: sellerName.trim(),
+            seller_id: selectedSellerId,
+            seller_name: selectedSeller?.name || '',
             amount: numericAmount
           }
         ])
@@ -88,22 +123,27 @@ const Seller = () => {
 
       if (error) throw error;
 
-      // Play applause sound
-      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1+y/ayEFJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCwxOp+DyvmEcAzaN0+u6ayEBJHfH6tOAMQYVXrTp3ZdQCw==');
-      audio.volume = 0.3;
-      audio.play().catch(() => {
-        // Ignore audio play errors (autoplay restrictions)
-      });
+      // Play custom sound if available, otherwise default applause
+      if (selectedSeller?.sound_file_url) {
+        const audio = new Audio(selectedSeller.sound_file_url);
+        audio.volume = 0.3;
+        audio.play().catch(() => {
+          // Fallback to default sound
+          playApplauseSound();
+        });
+      } else {
+        playApplauseSound();
+      }
 
       toast({
         title: "Försäljning rapporterad! 🎉",
-        description: `${sellerName} sålde för ${numericAmount.toLocaleString('sv-SE')} kr`,
+        description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} kr`,
         className: "success-gradient text-white border-success"
       });
 
       // Reset form
       setAmount('');
-      setSellerName('');
+      setSelectedSellerId('');
       
       // Update recent sales list
       loadRecentSales();
@@ -185,21 +225,33 @@ const Seller = () => {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Säljare namn */}
+              {/* Säljare dropdown */}
               <div className="space-y-2">
-                <Label htmlFor="sellerName" className="text-sm font-medium flex items-center gap-2">
+                <Label htmlFor="seller" className="text-sm font-medium flex items-center gap-2">
                   <User className="w-4 h-4 text-primary" />
                   Säljare
                 </Label>
-                <Input
-                  id="sellerName"
-                  type="text"
-                  placeholder="Skriv ditt namn"
-                  value={sellerName}
-                  onChange={(e) => setSellerName(e.target.value)}
-                  className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                  disabled={isSubmitting}
-                />
+                <Select value={selectedSellerId} onValueChange={setSelectedSellerId} disabled={isSubmitting}>
+                  <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
+                    <SelectValue placeholder="Välj säljare" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sellers.map((seller) => (
+                      <SelectItem key={seller.id} value={seller.id}>
+                        <div className="flex items-center gap-2">
+                          {seller.profile_image_url && (
+                            <img 
+                              src={seller.profile_image_url} 
+                              alt={seller.name} 
+                              className="w-6 h-6 rounded-full"
+                            />
+                          )}
+                          {seller.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Belopp */}
@@ -222,7 +274,7 @@ const Seller = () => {
               {/* Submit knapp */}
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !selectedSellerId}
                 className="w-full h-12 hero-gradient text-white font-semibold primary-shadow smooth-transition hover:scale-105 disabled:hover:scale-100"
               >
                 {isSubmitting ? (
@@ -267,7 +319,7 @@ const Seller = () => {
                       onClick={() => handleDeleteSale(sale.id)}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 w-4" />
                     </Button>
                   </div>
                 ))}

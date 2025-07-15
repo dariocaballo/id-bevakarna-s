@@ -10,7 +10,7 @@ const Index = () => {
       <div className="text-center pt-16 pb-12">
         <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white p-2 card-shadow">
           <img 
-            src={logoImage} 
+            src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
             alt="ID-Bevakarna" 
             className="w-full h-full object-contain rounded-full"
           />
@@ -116,6 +116,16 @@ const Index = () => {
       <div className="text-center mt-16 pb-8 text-sm text-muted-foreground">
         <p>ID-Bevakarna Säljsystem v1.0</p>
         <p className="mt-2">Utvecklat för att motivera och inspirera ditt säljteam</p>
+        <div className="mt-4">
+          <Button 
+            asChild
+            variant="outline"
+            size="sm"
+            className="text-xs"
+          >
+            <a href="/admin">🔐 Admin Panel</a>
+          </Button>
+        </div>
       </div>
     </div>
   );
