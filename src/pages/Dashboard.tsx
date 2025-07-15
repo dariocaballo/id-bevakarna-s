@@ -198,7 +198,7 @@ const Dashboard = () => {
         <div className="text-center mb-6">
           <div className="w-96 h-24 mx-auto mb-3 rounded-lg overflow-hidden">
             <img 
-              src="/lovable-uploads/7852a369-a453-428b-8c54-b37c09c280b2.png" 
+              src="/lovable-uploads/781f86e9-5c82-4c51-90da-581faec1654c.png" 
               alt="ID-Bevakarna" 
               className="w-full h-full object-contain"
             />
