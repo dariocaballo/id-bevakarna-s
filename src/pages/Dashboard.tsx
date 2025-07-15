@@ -198,6 +198,12 @@ const Dashboard = () => {
       const topSellersArray = Object.entries(monthlySellerTotals)
         .map(([name, data]) => {
           const seller = sellers.find(s => s.id === data.sellerId || s.name === name);
+          console.log('🖼️ TopSeller mapping:', { 
+            name, 
+            sellerId: data.sellerId, 
+            found_seller: !!seller,
+            image_url: seller?.profile_image_url 
+          });
           return {
             name,
             amount: data.amount,
@@ -221,6 +227,12 @@ const Dashboard = () => {
       const todaysSellersArray = Object.entries(todaysSellerTotals)
         .map(([name, data]) => {
           const seller = sellers.find(s => s.id === data.sellerId || s.name === name);
+          console.log('🖼️ TodaySeller mapping:', { 
+            name, 
+            sellerId: data.sellerId, 
+            found_seller: !!seller,
+            image_url: seller?.profile_image_url 
+          });
           return {
             name,
             amount: data.amount,
@@ -244,6 +256,11 @@ const Dashboard = () => {
     try {
       const { data, error } = await supabase.from('sellers').select('*');
       if (error) throw error;
+      console.log('🖼️ Loaded sellers with images:', data?.map(s => ({ 
+        name: s.name, 
+        profile_image_url: s.profile_image_url,
+        has_image: !!s.profile_image_url 
+      })));
       setSellers(data || []);
     } catch (error) {
       console.error('Error loading sellers:', error);
