@@ -38,8 +38,7 @@ const Dashboard = () => {
   const [activeChallenges, setActiveChallenges] = useState<DailyChallenge[]>([]);
 
   useEffect(() => {
-    loadSalesData();
-    loadSellers();
+    loadInitialData();
     loadSettings();
     loadChallenges();
     
@@ -117,10 +116,10 @@ const Dashboard = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
-        (payload) => {
+        async (payload) => {
           console.log('Sellers update:', payload);
-          loadSellers();
-          loadSalesData(); // Reload sales data when sellers change
+          await loadSellers();
+          await loadSalesData(); // Reload sales data when sellers change
         }
       )
       .on(
@@ -153,6 +152,12 @@ const Dashboard = () => {
       document.removeEventListener('keydown', handleUserInteraction);
     };
   }, []); // Ta bort sellers dependency för att undvika re-subscriptions
+
+  // Load sellers first, then sales data to ensure proper image mapping
+  const loadInitialData = async () => {
+    await loadSellers();
+    await loadSalesData();
+  };
 
   const loadSalesData = async () => {
     try {
@@ -197,12 +202,13 @@ const Dashboard = () => {
       
       const topSellersArray = Object.entries(monthlySellerTotals)
         .map(([name, data]) => {
-          const seller = sellers.find(s => s.id === data.sellerId || s.name === name);
+          const seller = sellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
           console.log('🖼️ TopSeller mapping:', { 
             name, 
             sellerId: data.sellerId, 
             found_seller: !!seller,
-            image_url: seller?.profile_image_url 
+            image_url: seller?.profile_image_url,
+            sellers_count: sellers.length
           });
           return {
             name,
@@ -226,12 +232,13 @@ const Dashboard = () => {
       
       const todaysSellersArray = Object.entries(todaysSellerTotals)
         .map(([name, data]) => {
-          const seller = sellers.find(s => s.id === data.sellerId || s.name === name);
+          const seller = sellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
           console.log('🖼️ TodaySeller mapping:', { 
             name, 
             sellerId: data.sellerId, 
             found_seller: !!seller,
-            image_url: seller?.profile_image_url 
+            image_url: seller?.profile_image_url,
+            sellers_count: sellers.length
           });
           return {
             name,
@@ -420,7 +427,10 @@ const Dashboard = () => {
                         {/* Stor cirkel med profilbild */}
                         <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-3 border-blue-300 shadow-lg hover:scale-105 transition-transform duration-200">
                           {seller.imageUrl ? (
-                            <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
+                            <>
+                              {console.log(`📸 Rendering image for ${seller.name}:`, seller.imageUrl)}
+                              <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
+                            </>
                           ) : (
                             <span className="text-2xl font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
                           )}
