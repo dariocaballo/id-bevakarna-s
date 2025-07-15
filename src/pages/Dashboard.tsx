@@ -4,6 +4,7 @@ import { TrendingUp, Calendar, Users, DollarSign, Trophy, Clock, Star } from 'lu
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { playApplauseSound } from '@/utils/sound';
+import { DynamicDashboard } from '@/components/DynamicDashboard';
 
 interface Sale {
   id: string;
@@ -316,6 +317,21 @@ const Dashboard = () => {
             Uppdaterad: {new Date().toLocaleTimeString('sv-SE')}
           </p>
         </div>
+
+        {/* Dynamic Dashboard Content */}
+        <DynamicDashboard 
+          salesData={{
+            totalToday,
+            totalMonth,
+            topSellers,
+            lastSale,
+            chartData,
+            kingQueen
+          }}
+          sellers={sellers}
+          challenges={challenges}
+          settings={settings}
+        />
 
         {/* Statistikkort */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
