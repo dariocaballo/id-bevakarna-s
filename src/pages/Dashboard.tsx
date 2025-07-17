@@ -7,8 +7,6 @@ import { Crown, TrendingUp, Users, DollarSign, Clock, Trophy } from 'lucide-reac
 import { supabase } from '@/integrations/supabase/client';
 import { useSellerData } from '@/hooks/useSellerData';
 import { useAudioManager } from '@/hooks/useAudioManager';
-import { useCelebrationSettings } from '@/hooks/useCelebrationSettings';
-import { CelebrationEffect } from '@/components/CelebrationEffect';
 
 interface Sale {
   id: string;
@@ -43,12 +41,10 @@ const Dashboard = () => {
     topSellers: []
   });
   const [loading, setLoading] = useState(true);
-  const [celebrationData, setCelebrationData] = useState<any>(null);
   
-  // Använd centrala hooks för seller-data, ljudhantering och celebration-inställningar
+  // Använd centrala hooks för seller-data och ljudhantering
   const { sellers, loading: sellersLoading, getSeller } = useSellerData();
   const { isInitialized: audioInitialized, preloadSellerAudio, playSellerSound } = useAudioManager();
-  const { settings: celebrationSettings } = useCelebrationSettings();
 
   // Preladda ljud när sellers är redo
   useEffect(() => {
@@ -175,36 +171,24 @@ const Dashboard = () => {
         async (payload) => {
           console.log('📡 Sales realtime update:', payload.eventType, payload.new || payload.old);
           
-          // Vid ny försäljning, trigga celebration
+          // Vid ny försäljning, spela ljud
           if (payload.eventType === 'INSERT' && payload.new) {
             const newSale = payload.new as Sale;
-            console.log('🎉 New sale detected for celebration:', newSale);
+            console.log('🎵 New sale detected:', newSale);
             
-            // Hitta säljare för celebration
+            // Hitta säljare och spela ljud
             const seller = newSale.seller_id ? getSeller(newSale.seller_id) : getSeller(newSale.seller_name);
             
-            if (seller && celebrationSettings.celebration_enabled) {
-              // Kontrollera om detta är dagens ledare (toppsäljare)
-              const currentDailySales = salesData.dailySales;
-              const isTopSeller = currentDailySales.length === 0 || 
-                                currentDailySales[0]?.seller_name === seller.name;
-
-              // Sätt upp celebration data
-              setCelebrationData({
-                seller_name: seller.name,
-                seller_id: seller.id,
-                amount: newSale.amount,
-                profile_image_url: seller.profile_image_url,
-                sound_file_url: seller.sound_file_url,
-                isTopSeller
-              });
-
-              console.log('🎉 Celebration triggered for:', seller.name, { isTopSeller });
+            if (seller && audioInitialized) {
+              const success = await playSellerSound(seller.id, seller.name);
+              if (!success) {
+                console.log(`❌ Could not play sound for ${seller.name}`);
+              }
             } else {
-              console.log('❌ No celebration - seller not found or disabled:', {
+              console.log('❌ Seller not found or audio not initialized:', {
                 seller_id: newSale.seller_id,
                 seller_name: newSale.seller_name,
-                celebration_enabled: celebrationSettings.celebration_enabled
+                audioInitialized
               });
             }
           }
@@ -221,7 +205,7 @@ const Dashboard = () => {
       console.log('📡 Cleaning up sales realtime listener');
       supabase.removeChannel(channel);
     };
-  }, [loadSalesData, getSeller, celebrationSettings.celebration_enabled, salesData.dailySales]);
+  }, [loadSalesData, getSeller, audioInitialized, playSellerSound]);
 
   // Memoized components för bättre prestanda
   const todaysLeader = useMemo(() => {
@@ -506,18 +490,6 @@ const Dashboard = () => {
           )}
         </div>
       </div>
-
-      {/* Celebration Effect */}
-      <CelebrationEffect
-        celebrationData={celebrationData}
-        onComplete={() => setCelebrationData(null)}
-        settings={{
-          showBubble: celebrationSettings.show_bubble,
-          showConfetti: celebrationSettings.show_confetti,
-          playSound: celebrationSettings.play_sound,
-          specialEffect: celebrationSettings.special_effect
-        }}
-      />
     </div>
   );
 };
