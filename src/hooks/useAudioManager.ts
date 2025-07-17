@@ -32,6 +32,24 @@ export const useAudioManager = () => {
     }
   }, []);
 
+  // Ensure audio context is ready (auto-resume if suspended)
+  const ensureAudioContextReady = useCallback(async () => {
+    if (!audioManager.current.audioContext) {
+      console.log('🎵 Audio context not initialized, initializing now...');
+      initializeAudio();
+    }
+
+    if (audioManager.current.audioContext && audioManager.current.audioContext.state === 'suspended') {
+      console.log('🎵 Audio context suspended, resuming...');
+      try {
+        await audioManager.current.audioContext.resume();
+        console.log('✅ Audio context resumed successfully');
+      } catch (error) {
+        console.error('❌ Failed to resume audio context:', error);
+      }
+    }
+  }, [initializeAudio]);
+
   // Preload seller sounds into memory
   const preloadSellerSounds = useCallback(async (sellers: Array<{id: string, sound_file_url?: string, name: string}>) => {
     console.log('🎵 Starting to preload seller sounds:', sellers.length);
@@ -91,6 +109,9 @@ export const useAudioManager = () => {
         return { played: false };
       }
 
+      // Ensure audio context is ready before playing
+      await ensureAudioContextReady();
+
       const preloadedAudio = audioManager.current.preloadedAudio.get(sellerId);
       
       if (preloadedAudio) {
@@ -106,9 +127,24 @@ export const useAudioManager = () => {
           : 3000; // Default 3 seconds
         
         console.log(`🎵 Playing preloaded sound for ${sellerName || 'Unknown seller'} (Duration: ${duration}ms)`);
-        await audioClone.play();
-        console.log(`✅ Successfully played sound for ${sellerName || 'Unknown seller'}`);
-        return { played: true, duration };
+        
+        // Add error handling for play promise
+        try {
+          await audioClone.play();
+          console.log(`✅ Successfully played sound for ${sellerName || 'Unknown seller'}`);
+          return { played: true, duration };
+        } catch (playError) {
+          console.error(`❌ Audio play failed for ${sellerName || 'Unknown seller'}:`, playError);
+          
+          // Try to handle common audio play errors
+          if (playError instanceof DOMException && playError.name === 'NotAllowedError') {
+            console.log('🔧 Audio play blocked by browser policy, trying to reinitialize...');
+            await ensureAudioContextReady();
+            // Don't retry here to avoid infinite loop
+          }
+          
+          return { played: false };
+        }
       } else {
         console.log(`❌ No preloaded sound found for ${sellerName || 'Unknown seller'} (ID: ${sellerId})`);
         return { played: false };
@@ -117,7 +153,7 @@ export const useAudioManager = () => {
       console.error(`❌ Error playing sound for ${sellerName || 'Unknown seller'}:`, error);
       return { played: false };
     }
-  }, []);
+  }, [ensureAudioContextReady]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -138,6 +174,7 @@ export const useAudioManager = () => {
     initializeAudio,
     preloadSellerSounds,
     playSellerSound,
+    ensureAudioContextReady,
     isInitialized: audioManager.current.isInitialized
   };
 };

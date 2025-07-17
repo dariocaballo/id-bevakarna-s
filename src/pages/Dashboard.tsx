@@ -24,7 +24,7 @@ interface Seller {
 }
 
 const Dashboard = () => {
-  const { initializeAudio, preloadSellerSounds, playSellerSound, isInitialized } = useAudioManager();
+  const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady, isInitialized } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
@@ -116,6 +116,50 @@ const Dashboard = () => {
       document.removeEventListener('touchstart', handleUserInteraction);
     };
   }, [sellers, initializeAudio, preloadSellerSounds, preloadImages]);
+
+  // Long-term stability: Resume audio context periodically
+  useEffect(() => {
+    const audioHealthCheck = setInterval(async () => {
+      console.log('🔍 Checking audio context health...');
+      await ensureAudioContextReady();
+    }, 60000); // Check every minute
+
+    return () => clearInterval(audioHealthCheck);
+  }, [ensureAudioContextReady]);
+
+  // Prevent page from sleeping on TV displays
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+          console.log('📺 Screen wake lock acquired');
+        }
+      } catch (error) {
+        console.log('📺 Wake lock not supported or failed:', error);
+      }
+    };
+
+    requestWakeLock();
+
+    // Handle visibility change to re-acquire wake lock
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && wakeLock !== null && wakeLock.released) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLock) {
+        wakeLock.release();
+      }
+    };
+  }, []);
 
   // Optimized image rendering with cache and fallback
   const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-20 h-20") => {

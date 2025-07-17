@@ -69,7 +69,12 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
   // Refs for managing subscriptions and preventing memory leaks
   const channelRef = useRef<RealtimeChannel | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const watchdogIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+  const lastHeartbeatRef = useRef<number>(Date.now());
+  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
 
   // Cache ref for sellers to avoid unnecessary re-fetches
   const sellersCache = useRef<Seller[]>([]);
@@ -223,33 +228,55 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
     }
   }, []);
 
-  const refreshData = useCallback(async () => {
-    console.log('🔄 Refreshing all data...');
-    const sellersData = await loadSellers();
-    await Promise.all([
-      loadSalesData(sellersData),
-      loadSettings(),
-      loadChallenges()
-    ]);
-    setIsLoading(false);
-    console.log('✅ Data refresh complete');
-  }, [loadSellers, loadSalesData, loadSettings, loadChallenges]);
-
-  // Initialize data and setup real-time subscriptions
-  useEffect(() => {
-    isMountedRef.current = true;
+  // Watchdog function to check connection health
+  const checkConnectionHealth = useCallback(() => {
+    const now = Date.now();
+    const timeSinceLastHeartbeat = now - lastHeartbeatRef.current;
     
-    // Initial data load
-    refreshData();
+    console.log('🔍 Connection health check - Time since last heartbeat:', timeSinceLastHeartbeat + 'ms');
+    
+    // If more than 2 minutes since last heartbeat, reconnect
+    if (timeSinceLastHeartbeat > 120000) {
+      console.warn('⚠️ Connection appears stale, attempting reconnection...');
+      reconnectRealtime();
+    }
+  }, []);
 
-    // Setup real-time subscription
+  // Reconnect realtime subscription
+  const reconnectRealtime = useCallback(() => {
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.error('❌ Max reconnection attempts reached');
+      return;
+    }
+
+    reconnectAttemptsRef.current++;
+    console.log(`🔄 Reconnecting realtime subscription (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+
+    // Clean up existing subscription
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    // Reset heartbeat
+    lastHeartbeatRef.current = Date.now();
+
+    // Setup new subscription
+    setupRealtimeSubscription();
+  }, []);
+
+  // Setup realtime subscription (extracted for reuse)
+  const setupRealtimeSubscription = useCallback(() => {
     console.log('🔄 Setting up real-time subscriptions...');
+    
     channelRef.current = supabase
       .channel('dashboard-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         async (payload) => {
+          lastHeartbeatRef.current = Date.now();
+          reconnectAttemptsRef.current = 0; // Reset on successful message
           console.log('🔊 Sales update received:', payload.eventType);
           
           if (payload.eventType === 'INSERT' && isMountedRef.current) {
@@ -277,6 +304,8 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
         async (payload) => {
+          lastHeartbeatRef.current = Date.now();
+          reconnectAttemptsRef.current = 0; // Reset on successful message
           console.log('👥 Sellers update received:', payload.eventType);
           const sellersData = await loadSellers();
           await loadSalesData(sellersData);
@@ -291,6 +320,8 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         'postgres_changes',
         { event: '*', schema: 'public', table: 'dashboard_settings' },
         () => {
+          lastHeartbeatRef.current = Date.now();
+          reconnectAttemptsRef.current = 0; // Reset on successful message
           console.log('⚙️ Settings update received');
           loadSettings();
         }
@@ -299,13 +330,46 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         'postgres_changes',
         { event: '*', schema: 'public', table: 'daily_challenges' },
         () => {
+          lastHeartbeatRef.current = Date.now();
+          reconnectAttemptsRef.current = 0; // Reset on successful message
           console.log('🎯 Challenges update received');
           loadChallenges();
         }
       )
       .subscribe((status) => {
         console.log('📡 Realtime subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          lastHeartbeatRef.current = Date.now();
+          reconnectAttemptsRef.current = 0;
+          console.log('✅ Successfully subscribed to realtime updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Realtime subscription error, will attempt reconnection');
+          setTimeout(reconnectRealtime, 5000); // Retry after 5 seconds
+        }
       });
+  }, [loadSalesData, loadSellers, loadSettings, loadChallenges, onNewSale, onSellerUpdate, reconnectRealtime]);
+
+  const refreshData = useCallback(async () => {
+    console.log('🔄 Refreshing all data...');
+    const sellersData = await loadSellers();
+    await Promise.all([
+      loadSalesData(sellersData),
+      loadSettings(),
+      loadChallenges()
+    ]);
+    setIsLoading(false);
+    console.log('✅ Data refresh complete');
+  }, [loadSellers, loadSalesData, loadSettings, loadChallenges]);
+
+  // Initialize data and setup real-time subscriptions
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    // Initial data load
+    refreshData();
+
+    // Setup real-time subscription
+    setupRealtimeSubscription();
 
     // Setup auto-refresh interval
     if (enableAutoRefresh) {
@@ -314,6 +378,22 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         loadSalesData();
       }, refreshInterval);
     }
+
+    // Setup watchdog timer to check connection health every 60 seconds
+    watchdogIntervalRef.current = setInterval(checkConnectionHealth, 60000);
+
+    // Setup heartbeat to keep connection alive every 30 seconds
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (channelRef.current) {
+        console.log('💓 Sending heartbeat...');
+        // Send a broadcast to keep connection alive
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'heartbeat',
+          payload: { timestamp: Date.now() }
+        });
+      }
+    }, 30000);
 
     // Cleanup function
     return () => {
@@ -329,8 +409,18 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
+
+      if (watchdogIntervalRef.current) {
+        clearInterval(watchdogIntervalRef.current);
+        watchdogIntervalRef.current = null;
+      }
+
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
     };
-  }, [refreshData, loadSalesData, loadSettings, loadChallenges, onNewSale, onSellerUpdate, enableAutoRefresh, refreshInterval]);
+  }, [refreshData, setupRealtimeSubscription, checkConnectionHealth, enableAutoRefresh, refreshInterval, loadSalesData]);
 
   return {
     totalToday,
