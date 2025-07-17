@@ -47,12 +47,13 @@ interface UseRealtimeDataReturn {
 
 interface UseRealtimeDataOptions {
   onNewSale?: (sale: Sale, seller?: Seller) => void;
+  onSellerUpdate?: (sellers: Seller[]) => void;
   enableAutoRefresh?: boolean;
   refreshInterval?: number;
 }
 
 export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealtimeDataReturn => {
-  const { onNewSale, enableAutoRefresh = true, refreshInterval = 30000 } = options;
+  const { onNewSale, onSellerUpdate, enableAutoRefresh = true, refreshInterval = 30000 } = options;
   
   // Data states
   const [totalToday, setTotalToday] = useState(0);
@@ -275,10 +276,15 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
-        async () => {
-          console.log('👥 Sellers update received');
+        async (payload) => {
+          console.log('👥 Sellers update received:', payload.eventType);
           const sellersData = await loadSellers();
           await loadSalesData(sellersData);
+          
+          // Notify parent component about seller changes for audio reloading
+          if (onSellerUpdate && payload.eventType === 'UPDATE') {
+            onSellerUpdate(sellersData);
+          }
         }
       )
       .on(
@@ -324,7 +330,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         refreshIntervalRef.current = null;
       }
     };
-  }, [refreshData, loadSalesData, loadSettings, loadChallenges, onNewSale, enableAutoRefresh, refreshInterval]);
+  }, [refreshData, loadSalesData, loadSettings, loadChallenges, onNewSale, onSellerUpdate, enableAutoRefresh, refreshInterval]);
 
   return {
     totalToday,

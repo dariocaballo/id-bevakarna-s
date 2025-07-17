@@ -27,29 +27,40 @@ const Dashboard = () => {
   const { initializeAudio, preloadSellerSounds, playSellerSound, isInitialized } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
+  const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   
   // Handle new sales with audio playback and celebration
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
     console.log('🔊 New sale detected:', sale.seller_name, sale.amount);
     console.log('🎵 Attempting to play sound for sale...');
     
-    // Trigger celebration overlay
-    setCelebrationSale(sale);
-    
-    // Play seller sound - always attempt unless explicitly disabled in settings
+    // Play seller sound and get duration for celebration sync
     try {
-      const soundPlayed = await playSellerSound(sale.seller_id, sale.seller_name);
+      const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
       
-      if (soundPlayed) {
+      if (audioResult.played) {
         console.log('✅ Successfully played sound for', sale.seller_name);
+        // Set celebration duration to match audio duration
+        setCelebrationAudioDuration(audioResult.duration);
       } else {
-        console.log('🎵 No custom sound played for', sale.seller_name, '- using fallback applause');
-        // Optional: Add fallback sound here if needed
+        console.log('🎵 No custom sound played for', sale.seller_name);
+        // Use default duration if no audio
+        setCelebrationAudioDuration(3000);
       }
     } catch (error) {
       console.error('❌ Error playing sound for', sale.seller_name, ':', error);
+      setCelebrationAudioDuration(3000); // Default duration on error
     }
+    
+    // Trigger celebration overlay (will use the audio duration we just set)
+    setCelebrationSale(sale);
   }, [playSellerSound]);
+
+  // Handle seller updates for audio reloading
+  const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
+    console.log('🔄 Sellers updated, reloading audio files...');
+    await preloadSellerSounds(updatedSellers);
+  }, [preloadSellerSounds]);
 
   // Use realtime data hook
   const {
@@ -64,6 +75,7 @@ const Dashboard = () => {
     isLoading
   } = useRealtimeData({
     onNewSale: handleNewSale,
+    onSellerUpdate: handleSellerUpdate,
     enableAutoRefresh: true,
     refreshInterval: 30000
   });
@@ -191,9 +203,13 @@ const Dashboard = () => {
       <CelebrationOverlay
         sale={celebrationSale}
         sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
-        onComplete={() => setCelebrationSale(null)}
+        onComplete={() => {
+          setCelebrationSale(null);
+          setCelebrationAudioDuration(undefined);
+        }}
         showBubble={settings.show_bubble !== false}
         showConfetti={settings.show_confetti !== false}
+        audioDuration={celebrationAudioDuration}
       />
 
         {/* TV-Optimerad Layout - Flex Container */}

@@ -83,12 +83,12 @@ export const useAudioManager = () => {
     console.log(`🎵 Preloading complete. ${audioManager.current.preloadedAudio.size} sounds ready`);
   }, []);
 
-  // Play seller sound with fallback
-  const playSellerSound = useCallback(async (sellerId?: string, sellerName?: string) => {
+  // Play seller sound with duration detection
+  const playSellerSound = useCallback(async (sellerId?: string, sellerName?: string): Promise<{ played: boolean; duration?: number }> => {
     try {
       if (!sellerId) {
         console.log('❌ No seller ID provided for sound playback');
-        return false;
+        return { played: false };
       }
 
       const preloadedAudio = audioManager.current.preloadedAudio.get(sellerId);
@@ -100,17 +100,22 @@ export const useAudioManager = () => {
         audioClone.volume = 1.0;
         audioClone.crossOrigin = 'anonymous';
         
-        console.log(`🎵 Playing preloaded sound for ${sellerName || 'Unknown seller'}`);
+        // Get duration (fallback to 3 seconds if not available)
+        const duration = preloadedAudio.duration && isFinite(preloadedAudio.duration) 
+          ? preloadedAudio.duration * 1000 // Convert to milliseconds
+          : 3000; // Default 3 seconds
+        
+        console.log(`🎵 Playing preloaded sound for ${sellerName || 'Unknown seller'} (Duration: ${duration}ms)`);
         await audioClone.play();
         console.log(`✅ Successfully played sound for ${sellerName || 'Unknown seller'}`);
-        return true;
+        return { played: true, duration };
       } else {
         console.log(`❌ No preloaded sound found for ${sellerName || 'Unknown seller'} (ID: ${sellerId})`);
-        return false;
+        return { played: false };
       }
     } catch (error) {
       console.error(`❌ Error playing sound for ${sellerName || 'Unknown seller'}:`, error);
-      return false;
+      return { played: false };
     }
   }, []);
 

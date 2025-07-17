@@ -11,6 +11,7 @@ interface CelebrationOverlayProps {
   onComplete: () => void;
   showBubble: boolean;
   showConfetti: boolean;
+  audioDuration?: number; // Duration from audio playback in milliseconds
 }
 
 export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
@@ -19,19 +20,23 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
   onComplete,
   showBubble,
   showConfetti,
+  audioDuration,
 }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     if (!sale) return;
 
+    // Calculate celebration duration - sync with audio or use default
+    const celebrationDuration = audioDuration || 3000; // Use audio duration or default 3 seconds
+    console.log(`🎉 Starting celebration for ${sale.seller_name} - Duration: ${celebrationDuration}ms`);
+
     // Start animation
     setIsVisible(true);
 
-    // Trigger confetti if enabled
+    // Trigger confetti if enabled - sync with audio duration
     if (showConfetti) {
-      const duration = 2000;
-      const animationEnd = Date.now() + duration;
+      const animationEnd = Date.now() + celebrationDuration;
       const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
 
       const randomInRange = (min: number, max: number) => {
@@ -45,7 +50,7 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
           return clearInterval(interval);
         }
 
-        const particleCount = 50 * (timeLeft / duration);
+        const particleCount = 50 * (timeLeft / celebrationDuration);
 
         confetti({
           ...defaults,
@@ -60,16 +65,17 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
       }, 250);
     }
 
-    // Hide after 3 seconds
+    // Hide celebration when audio finishes - sync with audio duration
     const timer = setTimeout(() => {
+      console.log(`🎉 Celebration ending for ${sale.seller_name}`);
       setIsVisible(false);
       setTimeout(onComplete, 300); // Wait for fade out
-    }, 3000);
+    }, celebrationDuration);
 
     return () => {
       clearTimeout(timer);
     };
-  }, [sale, showConfetti, onComplete]);
+  }, [sale, showConfetti, onComplete, audioDuration]);
 
   if (!sale || !showBubble) return null;
 
