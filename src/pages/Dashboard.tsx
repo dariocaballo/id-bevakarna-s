@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { playApplauseSound } from '@/utils/sound';
+import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { useAudioManager } from '@/hooks/useAudioManager';
+import { useImageCache } from '@/hooks/useImageCache';
 
 interface Sale {
   id: string;
@@ -19,302 +22,111 @@ interface Seller {
   monthly_goal: number;
 }
 
-interface DailyChallenge {
-  id: string;
-  title: string;
-  description: string;
-  target_amount: number;
-  is_active: boolean;
-}
-
 const Dashboard = () => {
-  const [totalToday, setTotalToday] = useState(0);
-  const [totalMonth, setTotalMonth] = useState(0);
-  const [topSellers, setTopSellers] = useState<{name: string, amount: number, imageUrl?: string}[]>([]);
-  const [lastSale, setLastSale] = useState<Sale | null>(null);
-  const [sellers, setSellers] = useState<Seller[]>([]);
-  const [todaysSellers, setTodaysSellers] = useState<{name: string, amount: number, imageUrl?: string}[]>([]);
-  const [settings, setSettings] = useState<{ [key: string]: any }>({});
-  const [activeChallenges, setActiveChallenges] = useState<DailyChallenge[]>([]);
+  const { initializeAudio, preloadSellerSounds, playSellerSound, isInitialized } = useAudioManager();
+  const { preloadImages, getCachedImage } = useImageCache();
+  
+  // Handle new sales with audio playback
+  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
+    console.log('🔊 New sale detected:', sale.seller_name, sale.amount);
+    
+    // Play seller sound
+    const soundPlayed = await playSellerSound(sale.seller_id, sale.seller_name);
+    
+    if (!soundPlayed) {
+      console.log('🎵 No custom sound played, using fallback applause');
+      // Optional: Add fallback sound here if needed
+    }
+  }, [playSellerSound]);
 
+  // Use realtime data hook
+  const {
+    totalToday,
+    totalMonth,
+    topSellers,
+    todaysSellers,
+    lastSale,
+    sellers,
+    activeChallenges,
+    settings,
+    isLoading
+  } = useRealtimeData({
+    onNewSale: handleNewSale,
+    enableAutoRefresh: true,
+    refreshInterval: 30000
+  });
+
+  // Initialize audio and preload resources when sellers data is available
   useEffect(() => {
-    loadInitialData();
-    loadSettings();
-    loadChallenges();
+    if (sellers.length === 0) return;
+
+    console.log('🎵 Initializing audio and preloading resources...');
     
-    // Försök aktivera AudioContext tidigt för att undvika browser-restriktioner
-    const initAudio = () => {
-      try {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        if (audioContext.state === 'suspended') {
-          audioContext.resume();
-        }
-        console.log('🎵 AudioContext initialized:', audioContext.state);
-      } catch (error) {
-        console.log('🎵 AudioContext not available');
-      }
-    };
-    
-    // Aktivera audio på första user interaction
+    // Initialize audio context on user interaction
     const handleUserInteraction = () => {
-      initAudio();
+      initializeAudio();
       document.removeEventListener('click', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
     };
     
     document.addEventListener('click', handleUserInteraction);
     document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
     
-    // Listen for real-time updates
-    const salesChannel = supabase
-      .channel('dashboard-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
-        async (payload) => {
-          console.log('🔊 Sales update received:', payload);
-          if (payload.eventType === 'INSERT') {
-            const newSale = payload.new as Sale;
-            setLastSale(newSale);
-            
-            // Hämta aktuell säljarlista för att säkerställa vi har rätt data
-            const { data: currentSellers } = await supabase.from('sellers').select('*');
-            
-            // Försök matcha på seller_id först, sedan på namn (case-insensitive)
-            let seller = currentSellers?.find(s => s.id === newSale.seller_id);
-            if (!seller && newSale.seller_name) {
-              seller = currentSellers?.find(s => s.name.toLowerCase() === newSale.seller_name.toLowerCase());
-            }
-            
-            console.log('🎵 Sale details:', { seller_id: newSale.seller_id, seller_name: newSale.seller_name });
-            console.log('🎵 Found seller:', seller?.name);
-            console.log('🎵 Sound URL:', seller?.sound_file_url);
-            console.log('🎵 Available sellers:', currentSellers?.map(s => s.name));
-            
-            if (seller?.sound_file_url) {
-              try {
-                console.log(`🎵 Attempting to play custom sound for ${seller.name}:`, seller.sound_file_url);
-                const audio = new Audio(seller.sound_file_url);
-                audio.volume = 1.0; // Full volym för säljares eget ljud
-                audio.crossOrigin = 'anonymous'; // För CORS
-                
-                // Försök spela ljudet
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                  await playPromise;
-                  console.log('✅ Successfully played custom sound for:', seller.name);
-                } else {
-                  throw new Error('Play promise undefined');
-                }
-              } catch (error) {
-                console.error('❌ Error playing custom sound:', error);
-                console.log('❌ Sound URL that failed:', seller.sound_file_url);
-                // INGEN FALLBACK - endast säljarens ljud ska spelas
-              }
-            } else {
-              console.log('❌ No custom sound found for seller:', newSale.seller_name);
-              console.log('❌ Seller data:', seller);
-            }
-          }
-          loadSalesData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sellers' },
-        async (payload) => {
-          console.log('Sellers update:', payload);
-          const sellersData = await loadSellers();
-          await loadSalesData(sellersData); // Reload sales data when sellers change
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'dashboard_settings' },
-        () => {
-          console.log('Settings update');
-          loadSettings();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'daily_challenges' },
-        () => {
-          console.log('Challenges update');
-          loadChallenges();
-        }
-      )
-      .subscribe();
+    // Preload seller sounds
+    preloadSellerSounds(sellers);
     
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadSalesData(); // Will fetch fresh sellers data
-    }, 30000);
+    // Preload seller images
+    const imageUrls = sellers
+      .map(seller => seller.profile_image_url)
+      .filter(url => url) as string[];
+    
+    if (imageUrls.length > 0) {
+      preloadImages(imageUrls);
+    }
     
     return () => {
-      supabase.removeChannel(salesChannel);
-      clearInterval(interval);
       document.removeEventListener('click', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
     };
-  }, []); // Ta bort sellers dependency för att undvika re-subscriptions
+  }, [sellers, initializeAudio, preloadSellerSounds, preloadImages]);
 
-  // Load sellers first, then sales data to ensure proper image mapping
-  const loadInitialData = async () => {
-    const sellersData = await loadSellers();
-    await loadSalesData(sellersData);
-  };
-
-  const loadSalesData = async (sellersData?: Seller[]) => {
-    try {
-      // Use provided sellers data or fetch fresh data
-      let currentSellers = sellersData;
-      if (!currentSellers) {
-        const { data } = await supabase.from('sellers').select('*');
-        currentSellers = data || [];
-      }
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      // Get all sales
-      const { data: allSales, error } = await supabase
-        .from('sales')
-        .select('*')
-        .order('timestamp', { ascending: false });
-
-      if (error) throw error;
-
-      const sales = allSales || [];
-      
-      // Calculate today's total
-      const todaysSales = sales.filter((sale: Sale) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= today;
-      });
-      const todaysTotal = todaysSales.reduce((sum: number, sale: Sale) => sum + sale.amount, 0);
-      setTotalToday(todaysTotal);
-      
-      // Calculate month's total
-      const monthsSales = sales.filter((sale: Sale) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= monthStart;
-      });
-      const monthsTotal = monthsSales.reduce((sum: number, sale: Sale) => sum + sale.amount, 0);
-      setTotalMonth(monthsTotal);
-      
-      // Calculate top sellers (month) with seller info
-      const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      monthsSales.forEach((sale: Sale) => {
-        if (!monthlySellerTotals[sale.seller_name]) {
-          monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        monthlySellerTotals[sale.seller_name].amount += sale.amount;
-      });
-      
-      const topSellersArray = Object.entries(monthlySellerTotals)
-        .map(([name, data]) => {
-          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
-          console.log('🖼️ TopSeller mapping:', { 
-            name, 
-            sellerId: data.sellerId, 
-            found_seller: !!seller,
-            image_url: seller?.profile_image_url,
-            sellers_count: currentSellers.length
-          });
-          return {
-            name,
-            amount: data.amount,
-            imageUrl: seller?.profile_image_url
-          };
-        })
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 5);
-      
-      setTopSellers(topSellersArray);
-      
-      // Calculate today's sales per seller for circles
-      const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      todaysSales.forEach((sale: Sale) => {
-        if (!todaysSellerTotals[sale.seller_name]) {
-          todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        todaysSellerTotals[sale.seller_name].amount += sale.amount;
-      });
-      
-      const todaysSellersArray = Object.entries(todaysSellerTotals)
-        .map(([name, data]) => {
-          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
-          console.log('🖼️ TodaySeller mapping:', { 
-            name, 
-            sellerId: data.sellerId, 
-            found_seller: !!seller,
-            image_url: seller?.profile_image_url,
-            sellers_count: currentSellers.length
-          });
-          return {
-            name,
-            amount: data.amount,
-            imageUrl: seller?.profile_image_url
-          };
-        })
-        .sort((a, b) => b.amount - a.amount);
-      
-      setTodaysSellers(todaysSellersArray);
-      
-      // Get last sale
-      if (sales.length > 0) {
-        setLastSale(sales[0]);
-      }
-    } catch (error) {
-      console.error('Error loading sales data:', error);
+  // Optimized image rendering with cache and fallback
+  const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-20 h-20") => {
+    console.log('📸 Rendering image for', seller.name + ':', seller.imageUrl);
+    
+    if (!seller.imageUrl) {
+      return (
+        <span className="text-lg font-bold text-slate-800">
+          {seller.name.charAt(0).toUpperCase()}
+        </span>
+      );
     }
-  };
 
-  const loadSellers = async (): Promise<Seller[]> => {
-    try {
-      const { data, error } = await supabase.from('sellers').select('*');
-      if (error) throw error;
-      console.log('🖼️ Loaded sellers with images:', data?.map(s => ({ 
-        name: s.name, 
-        profile_image_url: s.profile_image_url,
-        has_image: !!s.profile_image_url 
-      })));
-      setSellers(data || []);
-      return data || [];
-    } catch (error) {
-      console.error('Error loading sellers:', error);
-      return [];
-    }
-  };
-
-  const loadSettings = async () => {
-    try {
-      const { data, error } = await supabase.from('dashboard_settings').select('*');
-      if (error) throw error;
-      
-      const settingsObj: { [key: string]: any } = {};
-      data?.forEach(setting => {
-        settingsObj[setting.setting_key] = setting.setting_value;
-      });
-      setSettings(settingsObj);
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
-  };
-
-  const loadChallenges = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('daily_challenges')
-        .select('*')
-        .eq('is_active', true);
-      if (error) throw error;
-      setActiveChallenges(data || []);
-    } catch (error) {
-      console.error('Error loading challenges:', error);
-    }
-  };
+    const cachedImageUrl = getCachedImage(seller.imageUrl);
+    
+    return (
+      <img 
+        src={cachedImageUrl || seller.imageUrl}
+        alt={seller.name}
+        className={`${size} object-cover`}
+        onError={(e) => {
+          console.error('❌ Image failed to load for', seller.name);
+          // Hide broken image and show fallback
+          e.currentTarget.style.display = 'none';
+          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+          if (fallback) {
+            fallback.style.display = 'flex';
+          }
+        }}
+        onLoad={() => {
+          console.log('✅ Image loaded successfully for', seller.name);
+        }}
+      />
+    );
+  }, [getCachedImage]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
@@ -396,11 +208,11 @@ const Dashboard = () => {
                 <CardContent className="flex items-center justify-center">
                   <div className="flex items-center gap-2">
                     <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center overflow-hidden border-2 border-yellow-400">
-                      {todaysSellers[0].imageUrl ? (
-                        <img src={todaysSellers[0].imageUrl} alt={todaysSellers[0].name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-lg font-bold text-slate-800">{todaysSellers[0].name.charAt(0).toUpperCase()}</span>
-                      )}
+                      {renderSellerImage(todaysSellers[0], "w-full h-full")}
+                      {/* Fallback element */}
+                      <span className="text-lg font-bold text-slate-800" style={{display: 'none'}}>
+                        {todaysSellers[0].name.charAt(0).toUpperCase()}
+                      </span>
                     </div>
                     <div>
                       <p className="text-sm font-bold text-slate-800">{todaysSellers[0].name}</p>

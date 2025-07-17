@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { TrendingUp, User, DollarSign, CheckCircle, Trash2, Clock, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { playApplauseSound } from '@/utils/sound';
+import { useAudioManager } from '@/hooks/useAudioManager';
+import { useImageCache } from '@/hooks/useImageCache';
 
 interface Sale {
   id: string;
@@ -37,11 +39,27 @@ const Seller = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
   const { toast } = useToast();
+  
+  // Audio and image optimization hooks
+  const { initializeAudio, preloadSellerSounds, playSellerSound } = useAudioManager();
+  const { preloadImages, getCachedImage } = useImageCache();
 
   useEffect(() => {
     loadSellers();
     loadRecentSales();
     loadMonthlySales();
+    
+    // Initialize audio on user interaction
+    const handleUserInteraction = () => {
+      initializeAudio();
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+    
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
     
     // Real-time listeners for sellers and sales
     const sellersChannel = supabase
@@ -50,7 +68,7 @@ const Seller = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
         (payload) => {
-          console.log('Seller update:', payload);
+          console.log('👥 Seller update:', payload);
           loadSellers(); // Reload sellers when changes occur
         }
       )
@@ -58,33 +76,61 @@ const Seller = () => {
         'postgres_changes', 
         { event: '*', schema: 'public', table: 'sales' },
         (payload) => {
-          console.log('Sales update:', payload);
+          console.log('📊 Sales update:', payload);
           loadRecentSales(); // Reload recent sales when changes occur
           loadMonthlySales(); // Reload monthly sales when changes occur
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Seller page realtime status:', status);
+      });
     
     // Auto-refresh recent sales every 10 seconds
-    const interval = setInterval(loadRecentSales, 10000);
+    const interval = setInterval(() => {
+      console.log('⏰ Auto-refreshing recent sales...');
+      loadRecentSales();
+    }, 10000);
     
     return () => {
+      console.log('🧹 Cleaning up seller page subscriptions...');
       supabase.removeChannel(sellersChannel);
       clearInterval(interval);
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
     };
-  }, []);
+  }, [initializeAudio]);
 
   const loadSellers = async () => {
     try {
+      console.log('👥 Loading sellers...');
       const { data, error } = await supabase
         .from('sellers')
         .select('*')
         .order('name');
 
       if (error) throw error;
-      setSellers(data || []);
+      
+      const sellersData = data || [];
+      setSellers(sellersData);
+      
+      // Preload sounds and images when sellers are loaded
+      if (sellersData.length > 0) {
+        console.log('🎵 Preloading seller resources...');
+        preloadSellerSounds(sellersData);
+        
+        const imageUrls = sellersData
+          .map(seller => seller.profile_image_url)
+          .filter(url => url) as string[];
+        
+        if (imageUrls.length > 0) {
+          preloadImages(imageUrls);
+        }
+      }
+      
+      console.log('✅ Sellers loaded successfully:', sellersData.length);
     } catch (error) {
-      console.error('Error loading sellers:', error);
+      console.error('❌ Error loading sellers:', error);
       toast({
         title: "Fel",
         description: "Kunde inte ladda säljare",
@@ -183,15 +229,12 @@ const Seller = () => {
 
       if (error) throw error;
 
-      // Play custom sound if available, otherwise default applause
-      if (selectedSeller?.sound_file_url) {
-        const audio = new Audio(selectedSeller.sound_file_url);
-        audio.volume = 0.3;
-        audio.play().catch(() => {
-          // Fallback to default sound
-          playApplauseSound();
-        });
-      } else {
+      // Play seller sound using optimized audio manager
+      console.log('🎵 Attempting to play sound for sale...');
+      const soundPlayed = await playSellerSound(selectedSellerId, selectedSeller?.name);
+      
+      if (!soundPlayed) {
+        console.log('🎵 No custom sound played, using fallback applause');
         playApplauseSound();
       }
 
@@ -328,15 +371,20 @@ const Seller = () => {
                         <div className="flex items-center gap-2 w-full">
                           {seller.profile_image_url ? (
                             <img 
-                              src={seller.profile_image_url} 
+                              src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
                               alt={seller.name} 
                               className="w-6 h-6 rounded-full object-cover border border-gray-200"
+                              onError={(e) => {
+                                console.error('❌ Seller image failed to load:', seller.name);
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
                             />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-800">
-                              {seller.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          ) : null}
+                          <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-800" style={{display: seller.profile_image_url ? 'none' : 'flex'}}>
+                            {seller.name.charAt(0).toUpperCase()}
+                          </div>
                           <span className="font-medium text-gray-900">{seller.name}</span>
                         </div>
                       </SelectItem>

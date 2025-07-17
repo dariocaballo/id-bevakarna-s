@@ -69,43 +69,71 @@ const Admin = () => {
     }
   };
 
-  // Load data
+  // Load data with improved error handling and performance
   useEffect(() => {
     if (isAuthenticated) {
-      loadSellers();
-      loadChallenges();
-      loadSettings();
+      console.log('📊 Loading admin data...');
+      Promise.all([
+        loadSellers(),
+        loadChallenges(),
+        loadSettings()
+      ]).then(() => {
+        console.log('✅ Admin data loaded successfully');
+      }).catch((error) => {
+        console.error('❌ Error loading admin data:', error);
+        toast({
+          title: "Varning",
+          description: "Vissa data kunde inte laddas. Prova att uppdatera sidan.",
+          variant: "destructive"
+        });
+      });
     }
   }, [isAuthenticated]);
 
   const loadSellers = async () => {
-    const { data, error } = await supabase.from('sellers').select('*').order('created_at', { ascending: false });
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte ladda säljare", variant: "destructive" });
-    } else {
+    try {
+      console.log('👥 Loading sellers for admin...');
+      const { data, error } = await supabase.from('sellers').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      
+      console.log('✅ Sellers loaded:', data?.length || 0);
       setSellers(data || []);
+    } catch (error) {
+      console.error('❌ Error loading sellers:', error);
+      toast({ title: "Fel", description: "Kunde inte ladda säljare", variant: "destructive" });
     }
   };
 
   const loadChallenges = async () => {
-    const { data, error } = await supabase.from('daily_challenges').select('*').order('created_at', { ascending: false });
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte ladda utmaningar", variant: "destructive" });
-    } else {
+    try {
+      console.log('🎯 Loading challenges for admin...');
+      const { data, error } = await supabase.from('daily_challenges').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      
+      console.log('✅ Challenges loaded:', data?.length || 0);
       setChallenges(data || []);
+    } catch (error) {
+      console.error('❌ Error loading challenges:', error);
+      toast({ title: "Fel", description: "Kunde inte ladda utmaningar", variant: "destructive" });
     }
   };
 
   const loadSettings = async () => {
-    const { data, error } = await supabase.from('dashboard_settings').select('*');
-    if (error) {
-      toast({ title: "Fel", description: "Kunde inte ladda inställningar", variant: "destructive" });
-    } else {
+    try {
+      console.log('⚙️ Loading settings for admin...');
+      const { data, error } = await supabase.from('dashboard_settings').select('*');
+      if (error) throw error;
+      
       const settingsObj: { [key: string]: any } = {};
       data?.forEach(setting => {
         settingsObj[setting.setting_key] = setting.setting_value;
       });
+      
+      console.log('✅ Settings loaded:', Object.keys(settingsObj).length);
       setSettings(settingsObj);
+    } catch (error) {
+      console.error('❌ Error loading settings:', error);
+      toast({ title: "Fel", description: "Kunde inte ladda inställningar", variant: "destructive" });
     }
   };
 
@@ -228,37 +256,50 @@ const Admin = () => {
     }
   };
 
-  // Settings management
+  // Settings management with improved performance
   const handleSettingChange = async (key: string, value: any) => {
-    // First check if setting exists
-    const { data: existing } = await supabase
-      .from('dashboard_settings')
-      .select('id')
-      .eq('setting_key', key)
-      .single();
-
-    let error;
-    if (existing) {
-      // Update existing setting
-      const { error: updateError } = await supabase
-        .from('dashboard_settings')
-        .update({ setting_value: value })
-        .eq('setting_key', key);
-      error = updateError;
-    } else {
-      // Insert new setting
-      const { error: insertError } = await supabase
-        .from('dashboard_settings')
-        .insert({ setting_key: key, setting_value: value });
-      error = insertError;
-    }
-
-    if (error) {
-      console.error('Setting update error:', error);
-      toast({ title: "Fel", description: "Kunde inte uppdatera inställning", variant: "destructive" });
-    } else {
+    try {
+      console.log('⚙️ Updating setting:', key, '=', value);
+      
+      // Optimistically update UI first
       setSettings(prev => ({ ...prev, [key]: value }));
-      toast({ title: "Framgång", description: "Inställning uppdaterad!" });
+      
+      // First check if setting exists
+      const { data: existing } = await supabase
+        .from('dashboard_settings')
+        .select('id')
+        .eq('setting_key', key)
+        .single();
+
+      let error;
+      if (existing) {
+        // Update existing setting
+        const { error: updateError } = await supabase
+          .from('dashboard_settings')
+          .update({ setting_value: value })
+          .eq('setting_key', key);
+        error = updateError;
+      } else {
+        // Insert new setting
+        const { error: insertError } = await supabase
+          .from('dashboard_settings')
+          .insert({ setting_key: key, setting_value: value });
+        error = insertError;
+      }
+
+      if (error) {
+        console.error('❌ Setting update error:', error);
+        // Revert optimistic update
+        loadSettings();
+        toast({ title: "Fel", description: "Kunde inte uppdatera inställning", variant: "destructive" });
+      } else {
+        console.log('✅ Setting updated successfully:', key);
+        toast({ title: "Framgång", description: "Inställning uppdaterad!" });
+      }
+    } catch (error) {
+      console.error('❌ Unexpected error updating setting:', error);
+      loadSettings(); // Reload to ensure consistency
+      toast({ title: "Fel", description: "Oväntat fel vid uppdatering", variant: "destructive" });
     }
   };
 
