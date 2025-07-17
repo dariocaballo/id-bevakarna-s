@@ -32,20 +32,45 @@ export const useAudioManager = () => {
     }
   }, []);
 
-  // Ensure audio context is ready (auto-resume if suspended)
+  // Enhanced audio context management for 24/7 operation
   const ensureAudioContextReady = useCallback(async () => {
+    const now = Date.now();
+    
     if (!audioManager.current.audioContext) {
       console.log('🎵 Audio context not initialized, initializing now...');
       initializeAudio();
     }
 
-    if (audioManager.current.audioContext && audioManager.current.audioContext.state === 'suspended') {
-      console.log('🎵 Audio context suspended, resuming...');
-      try {
-        await audioManager.current.audioContext.resume();
-        console.log('✅ Audio context resumed successfully');
-      } catch (error) {
-        console.error('❌ Failed to resume audio context:', error);
+    if (audioManager.current.audioContext) {
+      const state = audioManager.current.audioContext.state;
+      console.log(`🎵 Audio context state: ${state}`);
+      
+      if (state === 'suspended') {
+        console.log('🎵 Audio context suspended/interrupted, resuming for 24/7 operation...');
+        try {
+          await audioManager.current.audioContext.resume();
+          console.log('✅ Audio context resumed successfully');
+          
+          // Verify it's actually running
+          if (audioManager.current.audioContext.state === 'running') {
+            console.log('✅ Audio context confirmed running');
+          } else {
+            console.warn('⚠️ Audio context not running after resume attempt');
+          }
+        } catch (error) {
+          console.error('❌ Failed to resume audio context:', error);
+          
+          // Try to recreate audio context if resume fails
+          try {
+            console.log('🔄 Attempting to recreate audio context...');
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            audioManager.current.audioContext = new AudioContextClass();
+            audioManager.current.isInitialized = true;
+            console.log('✅ Audio context recreated successfully');
+          } catch (recreateError) {
+            console.error('❌ Failed to recreate audio context:', recreateError);
+          }
+        }
       }
     }
   }, [initializeAudio]);
@@ -155,20 +180,49 @@ export const useAudioManager = () => {
     }
   }, [ensureAudioContextReady]);
 
-  // Cleanup on unmount
+  // Enhanced cleanup and periodic maintenance for 24/7 operation
   useEffect(() => {
+    // Periodic audio health check for long-term stability
+    const audioHealthInterval = setInterval(async () => {
+      console.log('🔍 Performing audio health check for 24/7 operation...');
+      
+      if (audioManager.current.audioContext) {
+        const state = audioManager.current.audioContext.state;
+        console.log(`🎵 Audio context health: ${state}`);
+        
+        if (state === 'suspended') {
+          console.log('🔧 Audio context needs attention, ensuring readiness...');
+          await ensureAudioContextReady();
+        }
+      }
+      
+      // Check preloaded audio integrity
+      const preloadedCount = audioManager.current.preloadedAudio.size;
+      console.log(`🎵 Preloaded audio files: ${preloadedCount}`);
+      
+      if (preloadedCount === 0) {
+        console.warn('⚠️ No preloaded audio found, may need re-initialization');
+      }
+    }, 5 * 60 * 1000); // Check every 5 minutes
+
     return () => {
+      clearInterval(audioHealthInterval);
+      
+      // Enhanced cleanup
+      console.log('🧹 Enhanced AudioManager cleanup...');
+      
       // Clear all preloaded audio
       audioManager.current.preloadedAudio.clear();
       
-      // Close audio context
+      // Close audio context properly
       if (audioManager.current.audioContext && audioManager.current.audioContext.state !== 'closed') {
         audioManager.current.audioContext.close();
       }
       
-      console.log('🎵 AudioManager cleaned up');
+      audioManager.current.isInitialized = false;
+      console.log('🎵 AudioManager cleaned up for 24/7 operation');
     };
-  }, []);
+  }, [ensureAudioContextReady]);
 
   return {
     initializeAudio,

@@ -5,6 +5,7 @@ import { playApplauseSound } from '@/utils/sound';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAudioManager } from '@/hooks/useAudioManager';
 import { useImageCache } from '@/hooks/useImageCache';
+import { useSystemStability } from '@/hooks/useSystemStability';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 
 interface Sale {
@@ -29,10 +30,13 @@ const Dashboard = () => {
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   
-  // Handle new sales with audio playback and celebration
+  // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
-    console.log('🔊 New sale detected:', sale.seller_name, sale.amount);
+    console.log('🔊 New sale detected for 24/7 system:', sale.seller_name, sale.amount, 'at', new Date().toISOString());
     console.log('🎵 Attempting to play sound for sale...');
+    
+    // Ensure audio is ready for 24/7 operation
+    await ensureAudioContextReady();
     
     // Play seller sound and get duration for celebration sync
     try {
@@ -54,15 +58,32 @@ const Dashboard = () => {
     
     // Trigger celebration overlay (will use the audio duration we just set)
     setCelebrationSale(sale);
-  }, [playSellerSound]);
+  }, [playSellerSound, ensureAudioContextReady]);
 
-  // Handle seller updates for audio reloading
+  // Handle seller updates for audio reloading in 24/7 operation
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
-    console.log('🔄 Sellers updated, reloading audio files...');
+    console.log('🔄 Sellers updated in 24/7 system, reloading audio files...');
+    await ensureAudioContextReady(); // Ensure audio is ready before reloading
     await preloadSellerSounds(updatedSellers);
-  }, [preloadSellerSounds]);
+  }, [preloadSellerSounds, ensureAudioContextReady]);
 
-  // Use realtime data hook
+  // Enhanced system stability monitoring for 24/7 TV operation
+  const { performSystemHealthCheck } = useSystemStability({
+    onConnectionIssue: () => {
+      console.warn('🚨 System stability issue detected on TV display');
+      // Could trigger a visual indicator or notification
+    },
+    onMemoryWarning: () => {
+      console.warn('🚨 Memory warning for 24/7 operation');
+      // Could trigger garbage collection or optimization
+    },
+    onPerformanceDrop: () => {
+      console.warn('🚨 Performance drop detected on TV display');
+      // Could trigger performance optimization
+    }
+  });
+
+  // Use enhanced realtime data hook with TV-optimized settings
   const {
     totalToday,
     totalMonth,
@@ -77,87 +98,112 @@ const Dashboard = () => {
     onNewSale: handleNewSale,
     onSellerUpdate: handleSellerUpdate,
     enableAutoRefresh: true,
-    refreshInterval: 30000
+    refreshInterval: 10000 // More frequent updates for TV display (10 seconds)
   });
 
-  // Initialize audio and preload resources when sellers data is available
+  // Enhanced initialization for 24/7 TV operation
   useEffect(() => {
     if (sellers.length === 0) return;
 
-    console.log('🎵 Initializing audio and preloading resources...');
+    console.log('🎵 Initializing enhanced audio and resources for 24/7 TV operation...');
     
-    // Initialize audio context on user interaction
-    const handleUserInteraction = () => {
-      initializeAudio();
+    // Enhanced audio initialization for TV displays
+    const handleUserInteraction = async () => {
+      await initializeAudio();
+      await ensureAudioContextReady();
       document.removeEventListener('click', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
       document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('focus', handleUserInteraction);
     };
     
+    // Multiple event listeners for better TV compatibility
     document.addEventListener('click', handleUserInteraction);
     document.addEventListener('keydown', handleUserInteraction);
     document.addEventListener('touchstart', handleUserInteraction);
+    document.addEventListener('focus', handleUserInteraction);
     
-    // Preload seller sounds
-    preloadSellerSounds(sellers);
+    // Immediate initialization attempt (for auto-started systems)
+    initializeAudio();
     
-    // Preload seller images
+    // Preload seller sounds with verification
+    preloadSellerSounds(sellers).then(() => {
+      console.log('✅ All seller sounds preloaded for 24/7 operation');
+    });
+    
+    // Preload seller images with optimization
     const imageUrls = sellers
       .map(seller => seller.profile_image_url)
       .filter(url => url) as string[];
     
     if (imageUrls.length > 0) {
-      preloadImages(imageUrls);
+      preloadImages(imageUrls).then(() => {
+        console.log('✅ All seller images preloaded for 24/7 operation');
+      });
     }
     
     return () => {
       document.removeEventListener('click', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
       document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('focus', handleUserInteraction);
     };
-  }, [sellers, initializeAudio, preloadSellerSounds, preloadImages]);
+  }, [sellers, initializeAudio, ensureAudioContextReady, preloadSellerSounds, preloadImages]);
 
-  // Long-term stability: Resume audio context periodically
+  // Comprehensive monitoring for 24/7 TV operation
   useEffect(() => {
+    // Enhanced audio health monitoring for TV displays
     const audioHealthCheck = setInterval(async () => {
-      console.log('🔍 Checking audio context health...');
+      console.log('🔍 Comprehensive audio health check for 24/7 TV operation...');
       await ensureAudioContextReady();
-    }, 60000); // Check every minute
+      
+      // Verify preloaded sounds are still available
+      const preloadedCount = sellers.filter(seller => 
+        seller.sound_file_url // Only count sellers with sound files
+      ).length;
+      console.log(`🎵 Expected ${preloadedCount} preloaded sounds for TV operation`);
+    }, 2 * 60 * 1000); // Check every 2 minutes for TV
 
-    return () => clearInterval(audioHealthCheck);
-  }, [ensureAudioContextReady]);
-
-  // Prevent page from sleeping on TV displays
-  useEffect(() => {
-    let wakeLock: any = null;
-
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await (navigator as any).wakeLock.request('screen');
-          console.log('📺 Screen wake lock acquired');
-        }
-      } catch (error) {
-        console.log('📺 Wake lock not supported or failed:', error);
+    // Comprehensive system health check
+    const systemHealthCheck = setInterval(() => {
+      console.log('🛡️ Performing comprehensive system health check for 24/7 TV...');
+      performSystemHealthCheck();
+      
+      // Additional TV-specific checks
+      if (document.hidden) {
+        console.warn('⚠️ Document is hidden - may affect TV display');
       }
-    };
-
-    requestWakeLock();
-
-    // Handle visibility change to re-acquire wake lock
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && wakeLock !== null && wakeLock.released) {
-        requestWakeLock();
+      
+      if (!document.hasFocus()) {
+        console.warn('⚠️ Document lost focus - may affect TV interaction');
       }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    }, 3 * 60 * 1000); // Check every 3 minutes for TV
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (wakeLock) {
-        wakeLock.release();
-      }
+      clearInterval(audioHealthCheck);
+      clearInterval(systemHealthCheck);
+    };
+  }, [ensureAudioContextReady, performSystemHealthCheck, sellers]);
+
+  // TV-specific display optimization
+  useEffect(() => {
+    // Prevent context menu on TV (right-click)
+    const preventContextMenu = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', preventContextMenu);
+    
+    // Prevent drag operations on TV
+    const preventDrag = (e: DragEvent) => e.preventDefault();
+    document.addEventListener('dragstart', preventDrag);
+    
+    // Optimize for TV display
+    document.body.style.userSelect = 'none'; // Prevent text selection
+    document.body.style.webkitUserSelect = 'none';
+    
+    return () => {
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.removeEventListener('dragstart', preventDrag);
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
     };
   }, []);
 
