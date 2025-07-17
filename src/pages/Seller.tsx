@@ -4,8 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { TrendingUp, User, DollarSign, CheckCircle, Trash2, Clock } from 'lucide-react';
+import { TrendingUp, User, DollarSign, CheckCircle, Trash2, Clock, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { playApplauseSound } from '@/utils/sound';
 
@@ -31,11 +33,15 @@ const Seller = () => {
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
+  const [monthlySales, setMonthlySales] = useState<Sale[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     loadSellers();
     loadRecentSales();
+    loadMonthlySales();
     
     // Real-time listeners for sellers and sales
     const sellersChannel = supabase
@@ -54,6 +60,7 @@ const Seller = () => {
         (payload) => {
           console.log('Sales update:', payload);
           loadRecentSales(); // Reload recent sales when changes occur
+          loadMonthlySales(); // Reload monthly sales when changes occur
         }
       )
       .subscribe();
@@ -105,6 +112,34 @@ const Seller = () => {
       console.error('Error loading sales:', error);
     }
   };
+
+  const loadMonthlySales = async () => {
+    if (!selectedSellerId) return;
+    
+    try {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*')
+        .eq('seller_id', selectedSellerId)
+        .gte('timestamp', startOfMonth.toISOString())
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+      
+      setMonthlySales(data || []);
+    } catch (error) {
+      console.error('Error loading monthly sales:', error);
+    }
+  };
+
+  // Ladda månadsförsäljning när säljare väljs
+  useEffect(() => {
+    loadMonthlySales();
+  }, [selectedSellerId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,6 +207,7 @@ const Seller = () => {
       
       // Update recent sales list
       loadRecentSales();
+      loadMonthlySales();
       
     } catch (error) {
       toast({
@@ -201,6 +237,7 @@ const Seller = () => {
       
       // Update recent sales list
       loadRecentSales();
+      loadMonthlySales();
       
     } catch (error) {
       toast({
@@ -223,6 +260,29 @@ const Seller = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const formatDateTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleDateString('sv-SE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const confirmDeleteSale = (sale: Sale) => {
+    setSaleToDelete(sale);
+    setDeleteDialogOpen(true);
+  };
+
+  const executeDeleteSale = async () => {
+    if (!saleToDelete) return;
+    
+    await handleDeleteSale(saleToDelete.id);
+    setDeleteDialogOpen(false);
+    setSaleToDelete(null);
   };
 
   return (
@@ -358,6 +418,90 @@ const Seller = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Säljares egna månadssälj */}
+        {selectedSellerId && monthlySales.length > 0 && (
+          <Card className="card-shadow border-0 mt-6">
+            <CardHeader className="text-center pb-4">
+              <CardTitle className="text-lg text-primary flex items-center justify-center gap-2">
+                <Calendar className="w-5 h-5" />
+                Dina försäljningar denna månad
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Datum & tid</TableHead>
+                    <TableHead>Belopp</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlySales.map((sale) => (
+                    <TableRow key={sale.id}>
+                      <TableCell className="font-medium">
+                        {formatDateTime(sale.timestamp)}
+                      </TableCell>
+                      <TableCell>{formatCurrency(sale.amount)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => confirmDeleteSale(sale)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          title="Ta bort försäljning"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="mt-4 p-3 bg-accent/10 rounded-lg">
+                <p className="text-sm text-muted-foreground text-center">
+                  Totalt denna månad: <span className="font-semibold text-foreground">
+                    {formatCurrency(monthlySales.reduce((sum, sale) => sum + sale.amount, 0))}
+                  </span>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Bekräftelsedialog för borttagning */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Ta bort försäljning</DialogTitle>
+              <DialogDescription>
+                Är du säker på att du vill ta bort denna försäljning? 
+                <br />
+                <strong>Belopp:</strong> {saleToDelete ? formatCurrency(saleToDelete.amount) : ''}
+                <br />
+                <strong>Datum:</strong> {saleToDelete ? formatDateTime(saleToDelete.timestamp) : ''}
+                <br />
+                <br />
+                Detta går inte att ångra och kommer att uppdatera alla statistiker direkt.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setDeleteDialogOpen(false)}
+              >
+                Avbryt
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={executeDeleteSale}
+              >
+                Ta bort
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-muted-foreground">
