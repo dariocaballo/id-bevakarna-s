@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import { Crown, TrendingUp, Users, DollarSign, Clock, Trophy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { playApplauseSound } from '@/utils/sound';
+import { useSellerData } from '@/hooks/useSellerData';
+import { useAudioManager } from '@/hooks/useAudioManager';
 
 interface Sale {
   id: string;
@@ -11,561 +16,478 @@ interface Sale {
   timestamp: string;
 }
 
-interface Seller {
-  id: string;
-  name: string;
-  profile_image_url?: string;
-  sound_file_url?: string;
-  monthly_goal: number;
-}
-
-interface DailyChallenge {
-  id: string;
-  title: string;
-  description: string;
-  target_amount: number;
-  is_active: boolean;
+interface SalesData {
+  todayTotal: number;
+  monthTotal: number;
+  dailySales: Array<{
+    seller_name: string;
+    seller_id?: string;
+    total: number;
+    profile_image_url?: string;
+  }>;
+  topSellers: Array<{
+    seller_name: string;
+    seller_id?: string;
+    total: number;
+    profile_image_url?: string;
+  }>;
 }
 
 const Dashboard = () => {
-  const [totalToday, setTotalToday] = useState(0);
-  const [totalMonth, setTotalMonth] = useState(0);
-  const [topSellers, setTopSellers] = useState<{name: string, amount: number, imageUrl?: string}[]>([]);
-  const [lastSale, setLastSale] = useState<Sale | null>(null);
-  const [sellers, setSellers] = useState<Seller[]>([]);
-  const [todaysSellers, setTodaysSellers] = useState<{name: string, amount: number, imageUrl?: string}[]>([]);
-  const [settings, setSettings] = useState<{ [key: string]: any }>({});
-  const [activeChallenges, setActiveChallenges] = useState<DailyChallenge[]>([]);
+  const [salesData, setSalesData] = useState<SalesData>({
+    todayTotal: 0,
+    monthTotal: 0,
+    dailySales: [],
+    topSellers: []
+  });
+  const [loading, setLoading] = useState(true);
+  
+  // Använd centrala hooks för seller-data och ljudhantering
+  const { sellers, loading: sellersLoading, getSeller } = useSellerData();
+  const { isInitialized: audioInitialized, preloadSellerAudio, playSellerSound } = useAudioManager();
 
+  // Preladda ljud när sellers är redo
   useEffect(() => {
-    loadInitialData();
-    loadSettings();
-    loadChallenges();
-    
-    // Försök aktivera AudioContext tidigt för att undvika browser-restriktioner
-    const initAudio = () => {
-      try {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        if (audioContext.state === 'suspended') {
-          audioContext.resume();
+    if (sellers.length > 0 && !audioInitialized) {
+      console.log('🎧 Initializing audio for', sellers.length, 'sellers');
+      preloadSellerAudio(sellers);
+    }
+  }, [sellers, audioInitialized, preloadSellerAudio]);
+
+  // Optimerad sales data loading med memoization
+  const loadSalesData = useCallback(async () => {
+    if (sellersLoading) {
+      console.log('⏳ Waiting for sellers to load before fetching sales data');
+      return;
+    }
+
+    try {
+      console.log('📊 Loading sales data...');
+      setLoading(true);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+      // Parallell fetch för bättre prestanda
+      const [todayResponse, monthResponse] = await Promise.all([
+        supabase
+          .from('sales')
+          .select('*')
+          .gte('timestamp', today.toISOString()),
+        supabase
+          .from('sales')
+          .select('*')
+          .gte('timestamp', startOfMonth.toISOString())
+      ]);
+
+      if (todayResponse.error) throw todayResponse.error;
+      if (monthResponse.error) throw monthResponse.error;
+
+      const todaySales = todayResponse.data || [];
+      const monthSales = monthResponse.data || [];
+
+      // Beräkna försäljningsdata med seller-info
+      const todayTotal = todaySales.reduce((sum, sale) => sum + sale.amount, 0);
+      const monthTotal = monthSales.reduce((sum, sale) => sum + sale.amount, 0);
+
+      // Gruppera dagens försäljning per säljare
+      const dailySalesMap = new Map<string, { seller_name: string; seller_id?: string; total: number; profile_image_url?: string }>();
+      
+      todaySales.forEach(sale => {
+        const key = sale.seller_id || sale.seller_name;
+        const seller = sale.seller_id ? getSeller(sale.seller_id) : getSeller(sale.seller_name);
+        
+        if (dailySalesMap.has(key)) {
+          dailySalesMap.get(key)!.total += sale.amount;
+        } else {
+          dailySalesMap.set(key, {
+            seller_name: sale.seller_name,
+            seller_id: sale.seller_id,
+            total: sale.amount,
+            profile_image_url: seller?.profile_image_url
+          });
         }
-        console.log('🎵 AudioContext initialized:', audioContext.state);
-      } catch (error) {
-        console.log('🎵 AudioContext not available');
-      }
-    };
+      });
+
+      // Gruppera månadens försäljning för topplista
+      const monthSalesMap = new Map<string, { seller_name: string; seller_id?: string; total: number; profile_image_url?: string }>();
+      
+      monthSales.forEach(sale => {
+        const key = sale.seller_id || sale.seller_name;
+        const seller = sale.seller_id ? getSeller(sale.seller_id) : getSeller(sale.seller_name);
+        
+        if (monthSalesMap.has(key)) {
+          monthSalesMap.get(key)!.total += sale.amount;
+        } else {
+          monthSalesMap.set(key, {
+            seller_name: sale.seller_name,
+            seller_id: sale.seller_id,
+            total: sale.amount,
+            profile_image_url: seller?.profile_image_url
+          });
+        }
+      });
+
+      const dailySales = Array.from(dailySalesMap.values())
+        .sort((a, b) => b.total - a.total);
+      
+      const topSellers = Array.from(monthSalesMap.values())
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5);
+
+      setSalesData({
+        todayTotal,
+        monthTotal,
+        dailySales,
+        topSellers
+      });
+
+      console.log('✅ Sales data loaded successfully');
+    } catch (error) {
+      console.error('❌ Error loading sales data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [sellersLoading, getSeller]);
+
+  // Ladda data när sellers är redo
+  useEffect(() => {
+    if (!sellersLoading && sellers.length > 0) {
+      loadSalesData();
+    }
+  }, [sellersLoading, loadSalesData]);
+
+  // Setup realtime listener för sales
+  useEffect(() => {
+    console.log('📡 Setting up sales realtime listener');
     
-    // Aktivera audio på första user interaction
-    const handleUserInteraction = () => {
-      initAudio();
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
-    };
-    
-    document.addEventListener('click', handleUserInteraction);
-    document.addEventListener('keydown', handleUserInteraction);
-    
-    // Listen for real-time updates
-    const salesChannel = supabase
-      .channel('dashboard-updates')
+    const channel = supabase
+      .channel('sales-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         async (payload) => {
-          console.log('🔊 Sales update received:', payload);
-          if (payload.eventType === 'INSERT') {
+          console.log('📡 Sales realtime update:', payload.eventType, payload.new || payload.old);
+          
+          // Vid ny försäljning, spela ljud
+          if (payload.eventType === 'INSERT' && payload.new) {
             const newSale = payload.new as Sale;
-            setLastSale(newSale);
+            console.log('🎵 New sale detected:', newSale);
             
-            // Hämta aktuell säljarlista för att säkerställa vi har rätt data
-            const { data: currentSellers } = await supabase.from('sellers').select('*');
+            // Hitta säljare och spela ljud
+            const seller = newSale.seller_id ? getSeller(newSale.seller_id) : getSeller(newSale.seller_name);
             
-            // Försök matcha på seller_id först, sedan på namn (case-insensitive)
-            let seller = currentSellers?.find(s => s.id === newSale.seller_id);
-            if (!seller && newSale.seller_name) {
-              seller = currentSellers?.find(s => s.name.toLowerCase() === newSale.seller_name.toLowerCase());
-            }
-            
-            console.log('🎵 Sale details:', { seller_id: newSale.seller_id, seller_name: newSale.seller_name });
-            console.log('🎵 Found seller:', seller?.name);
-            console.log('🎵 Sound URL:', seller?.sound_file_url);
-            console.log('🎵 Available sellers:', currentSellers?.map(s => s.name));
-            
-            if (seller?.sound_file_url) {
-              try {
-                console.log(`🎵 Attempting to play custom sound for ${seller.name}:`, seller.sound_file_url);
-                const audio = new Audio(seller.sound_file_url);
-                audio.volume = 1.0; // Full volym för säljares eget ljud
-                audio.crossOrigin = 'anonymous'; // För CORS
-                
-                // Försök spela ljudet
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                  await playPromise;
-                  console.log('✅ Successfully played custom sound for:', seller.name);
-                } else {
-                  throw new Error('Play promise undefined');
-                }
-              } catch (error) {
-                console.error('❌ Error playing custom sound:', error);
-                console.log('❌ Sound URL that failed:', seller.sound_file_url);
-                // INGEN FALLBACK - endast säljarens ljud ska spelas
+            if (seller && audioInitialized) {
+              const success = await playSellerSound(seller.id, seller.name);
+              if (!success) {
+                console.log(`❌ Could not play sound for ${seller.name}`);
               }
             } else {
-              console.log('❌ No custom sound found for seller:', newSale.seller_name);
-              console.log('❌ Seller data:', seller);
+              console.log('❌ Seller not found or audio not initialized:', {
+                seller_id: newSale.seller_id,
+                seller_name: newSale.seller_name,
+                audioInitialized
+              });
             }
           }
+          
+          // Uppdatera sales data
           loadSalesData();
         }
       )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sellers' },
-        async (payload) => {
-          console.log('Sellers update:', payload);
-          const sellersData = await loadSellers();
-          await loadSalesData(sellersData); // Reload sales data when sellers change
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'dashboard_settings' },
-        () => {
-          console.log('Settings update');
-          loadSettings();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'daily_challenges' },
-        () => {
-          console.log('Challenges update');
-          loadChallenges();
-        }
-      )
-      .subscribe();
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadSalesData(); // Will fetch fresh sellers data
-    }, 30000);
-    
+      .subscribe((status) => {
+        console.log('📡 Sales realtime status:', status);
+      });
+
     return () => {
-      supabase.removeChannel(salesChannel);
-      clearInterval(interval);
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
+      console.log('📡 Cleaning up sales realtime listener');
+      supabase.removeChannel(channel);
     };
-  }, []); // Ta bort sellers dependency för att undvika re-subscriptions
+  }, [loadSalesData, getSeller, audioInitialized, playSellerSound]);
 
-  // Load sellers first, then sales data to ensure proper image mapping
-  const loadInitialData = async () => {
-    const sellersData = await loadSellers();
-    await loadSalesData(sellersData);
-  };
+  // Memoized components för bättre prestanda
+  const todaysLeader = useMemo(() => {
+    return salesData.dailySales.length > 0 ? salesData.dailySales[0] : null;
+  }, [salesData.dailySales]);
 
-  const loadSalesData = async (sellersData?: Seller[]) => {
-    try {
-      // Use provided sellers data or fetch fresh data
-      let currentSellers = sellersData;
-      if (!currentSellers) {
-        const { data } = await supabase.from('sellers').select('*');
-        currentSellers = data || [];
-      }
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      // Get all sales
-      const { data: allSales, error } = await supabase
-        .from('sales')
-        .select('*')
-        .order('timestamp', { ascending: false });
+  const renderSellerAvatar = useCallback((seller: { seller_name: string; profile_image_url?: string }, size: 'sm' | 'md' | 'lg' = 'md') => {
+    const sizeClasses = {
+      sm: 'w-8 h-8',
+      md: 'w-12 h-12', 
+      lg: 'w-16 h-16'
+    };
 
-      if (error) throw error;
+    const fallbackClasses = {
+      sm: 'text-xs',
+      md: 'text-sm',
+      lg: 'text-lg'
+    };
 
-      const sales = allSales || [];
-      
-      // Calculate today's total
-      const todaysSales = sales.filter((sale: Sale) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= today;
-      });
-      const todaysTotal = todaysSales.reduce((sum: number, sale: Sale) => sum + sale.amount, 0);
-      setTotalToday(todaysTotal);
-      
-      // Calculate month's total
-      const monthsSales = sales.filter((sale: Sale) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= monthStart;
-      });
-      const monthsTotal = monthsSales.reduce((sum: number, sale: Sale) => sum + sale.amount, 0);
-      setTotalMonth(monthsTotal);
-      
-      // Calculate top sellers (month) with seller info
-      const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      monthsSales.forEach((sale: Sale) => {
-        if (!monthlySellerTotals[sale.seller_name]) {
-          monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        monthlySellerTotals[sale.seller_name].amount += sale.amount;
-      });
-      
-      const topSellersArray = Object.entries(monthlySellerTotals)
-        .map(([name, data]) => {
-          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
-          console.log('🖼️ TopSeller mapping:', { 
-            name, 
-            sellerId: data.sellerId, 
-            found_seller: !!seller,
-            image_url: seller?.profile_image_url,
-            sellers_count: currentSellers.length
-          });
-          return {
-            name,
-            amount: data.amount,
-            imageUrl: seller?.profile_image_url
-          };
-        })
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 5);
-      
-      setTopSellers(topSellersArray);
-      
-      // Calculate today's sales per seller for circles
-      const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      todaysSales.forEach((sale: Sale) => {
-        if (!todaysSellerTotals[sale.seller_name]) {
-          todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        todaysSellerTotals[sale.seller_name].amount += sale.amount;
-      });
-      
-      const todaysSellersArray = Object.entries(todaysSellerTotals)
-        .map(([name, data]) => {
-          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
-          console.log('🖼️ TodaySeller mapping:', { 
-            name, 
-            sellerId: data.sellerId, 
-            found_seller: !!seller,
-            image_url: seller?.profile_image_url,
-            sellers_count: currentSellers.length
-          });
-          return {
-            name,
-            amount: data.amount,
-            imageUrl: seller?.profile_image_url
-          };
-        })
-        .sort((a, b) => b.amount - a.amount);
-      
-      setTodaysSellers(todaysSellersArray);
-      
-      // Get last sale
-      if (sales.length > 0) {
-        setLastSale(sales[0]);
-      }
-    } catch (error) {
-      console.error('Error loading sales data:', error);
-    }
-  };
+    return (
+      <Avatar className={sizeClasses[size]}>
+        <AvatarImage 
+          src={seller.profile_image_url} 
+          alt={seller.seller_name}
+          onError={(e) => {
+            console.log(`📷 Image failed for ${seller.seller_name}:`, seller.profile_image_url);
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+        <AvatarFallback className={`bg-primary text-primary-foreground ${fallbackClasses[size]}`}>
+          {seller.seller_name.charAt(0).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+    );
+  }, []);
 
-  const loadSellers = async (): Promise<Seller[]> => {
-    try {
-      const { data, error } = await supabase.from('sellers').select('*');
-      if (error) throw error;
-      console.log('🖼️ Loaded sellers with images:', data?.map(s => ({ 
-        name: s.name, 
-        profile_image_url: s.profile_image_url,
-        has_image: !!s.profile_image_url 
-      })));
-      setSellers(data || []);
-      return data || [];
-    } catch (error) {
-      console.error('Error loading sellers:', error);
-      return [];
-    }
-  };
-
-  const loadSettings = async () => {
-    try {
-      const { data, error } = await supabase.from('dashboard_settings').select('*');
-      if (error) throw error;
-      
-      const settingsObj: { [key: string]: any } = {};
-      data?.forEach(setting => {
-        settingsObj[setting.setting_key] = setting.setting_value;
-      });
-      setSettings(settingsObj);
-    } catch (error) {
-      console.error('Error loading settings:', error);
-    }
-  };
-
-  const loadChallenges = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('daily_challenges')
-        .select('*')
-        .eq('is_active', true);
-      if (error) throw error;
-      setActiveChallenges(data || []);
-    } catch (error) {
-      console.error('Error loading challenges:', error);
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount) + ' TB';
-  };
+    }).format(amount) + ' tb';
+  }, []);
 
-  const getMedalIcon = (index: number) => {
-    switch (index) {
-      case 0: return '🥇';
-      case 1: return '🥈';
-      case 2: return '🥉';
-      case 3: return '🏅';
-      case 4: return '🏅';
-      default: return '';
-    }
-  };
+  if (loading || sellersLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-background p-4 flex items-center justify-center">
+        <div className="text-center space-y-4 animate-fade-in">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="space-y-2">
+            <p className="text-lg font-medium text-primary">Laddar dashboard...</p>
+            <p className="text-sm text-muted-foreground">
+              {sellersLoading ? 'Laddar säljare...' : 'Laddar försäljningsdata...'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  // Check if night mode is active
-  const isNightTime = () => {
-    const now = new Date();
-    const hour = now.getHours();
-    return settings.night_mode_enabled === 'true' && (hour >= 18 || hour <= 9);
-  };
 
   return (
-    <div className={`h-screen overflow-hidden p-3 ${
-      isNightTime() 
-        ? 'bg-gradient-to-br from-slate-800 to-slate-900' 
-        : 'bg-gradient-to-br from-blue-50 to-blue-100'
-    }`}>
-      <div className="max-w-7xl mx-auto h-full flex flex-col">
-        {/* Header - Kompakt */}
-        <div className="text-center mb-3 flex-shrink-0">
-          <h1 className={`text-3xl font-bold mb-1 ${
-            isNightTime() ? 'text-white' : 'text-blue-800'
-          }`}>ID-Bevakarna</h1>
-          <h2 className={`text-lg font-semibold ${
-            isNightTime() ? 'text-slate-300' : 'text-blue-600'
-          }`}>Sales Dashboard</h2>
+    <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-background p-4 animate-fade-in">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header med logo och titel */}
+        <div className="text-center mb-8 space-y-4">
+          <div className="w-24 h-24 mx-auto rounded-full bg-white p-3 card-shadow hover-scale">
+            <img 
+              src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
+              alt="ID-Bevakarna" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold text-primary mb-2">ID-Bevakarna</h1>
+            <p className="text-lg text-muted-foreground">Sales Dashboard v2.0</p>
+          </div>
         </div>
 
-        {/* TV-Optimerad Layout - Flex Container */}
-        <div className="flex-1 flex flex-col gap-2 overflow-hidden">
-          
-          {/* Övre rad - Totaler + King/Queen (om aktiverad) */}
-          <div className="flex gap-2 h-32">
-            {/* Dagens Total */}
-            <Card className="flex-1 shadow-md border-0 bg-white">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-base text-slate-700 font-bold">DAGENS TOTALA TB</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-700">{formatCurrency(totalToday)}</div>
-                <p className="text-xs text-slate-500">Totalt idag</p>
-              </CardContent>
-            </Card>
+        {/* Statistikkort */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Card className="card-shadow border-0 hover-scale">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <DollarSign className="w-8 h-8 text-primary" />
+                <div>
+                  <p className="text-2xl font-bold text-primary">{formatCurrency(salesData.todayTotal)}</p>
+                  <p className="text-sm text-muted-foreground">Idag</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Månadens Total */}
-            <Card className="flex-1 shadow-md border-0 bg-white">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-base text-slate-700 font-bold">MÅNADENS TOTALA TB</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-700">{formatCurrency(totalMonth)}</div>
-                <p className="text-xs text-slate-500">Totalt denna månad</p>
-              </CardContent>
-            </Card>
+          <Card className="card-shadow border-0 hover-scale">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <TrendingUp className="w-8 h-8 text-success" />
+                <div>
+                  <p className="text-2xl font-bold text-success">{formatCurrency(salesData.monthTotal)}</p>
+                  <p className="text-sm text-muted-foreground">Denna månad</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Dagens Kung/Drottning - Kompakt */}
-            {settings.king_queen_enabled === 'true' && todaysSellers.length > 0 && (
-              <Card className="flex-1 shadow-md border-0 bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm text-slate-700 font-bold flex items-center justify-center gap-1">
-                    <span className="text-lg">👑</span> Dagens Kung/Drottning
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center overflow-hidden border-2 border-yellow-400">
-                      {todaysSellers[0].imageUrl ? (
-                        <img src={todaysSellers[0].imageUrl} alt={todaysSellers[0].name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-lg font-bold text-slate-800">{todaysSellers[0].name.charAt(0).toUpperCase()}</span>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{todaysSellers[0].name}</p>
-                      <p className="text-xs font-bold text-yellow-600">{formatCurrency(todaysSellers[0].amount)}</p>
-                    </div>
+          <Card className="card-shadow border-0 hover-scale">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <Users className="w-8 h-8 text-info" />
+                <div>
+                  <p className="text-2xl font-bold text-info">{salesData.dailySales.length}</p>
+                  <p className="text-sm text-muted-foreground">Aktiva säljare idag</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-shadow border-0 hover-scale">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2">
+                <Clock className="w-8 h-8 text-warning" />
+                <div>
+                  <p className="text-2xl font-bold text-warning">
+                    {new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Aktuell tid</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Kung/Drottning av dagen */}
+        {todaysLeader && (
+          <Card className="card-shadow border-0 mb-8 hero-gradient text-white overflow-hidden">
+            <CardContent className="p-8 text-center relative">
+              <div className="absolute top-4 right-4">
+                <Crown className="w-12 h-12 text-yellow-300 animate-pulse" />
+              </div>
+              <div className="space-y-4">
+                <h2 className="text-3xl font-bold flex items-center justify-center gap-3">
+                  <Trophy className="w-8 h-8 text-yellow-300" />
+                  Dagens Kung/Drottning
+                </h2>
+                <div className="flex items-center justify-center space-x-6">
+                  {renderSellerAvatar(todaysLeader, 'lg')}
+                  <div className="text-left">
+                    <p className="text-2xl font-bold">{todaysLeader.seller_name}</p>
+                    <p className="text-xl text-yellow-100">{formatCurrency(todaysLeader.total)}</p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-          {/* Huvud-innehåll - Grid som anpassar sig */}
-          <div className={`flex-1 grid gap-2 ${
-            // Dynamisk grid baserat på aktiva moduler
-            activeChallenges.length > 0 && settings.challenges_enabled === 'true' 
-              ? 'grid-cols-3' 
-              : settings.goals_enabled === 'true' && sellers.filter(s => s.monthly_goal > 0).length > 0
-                ? 'grid-cols-2'
-                : 'grid-cols-1'
-          }`}>
-            
-            {/* Dagens försäljning - Horisontell rangordning */}
-            {todaysSellers.length > 0 && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Dagens försäljning per säljare</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="flex flex-wrap justify-center gap-4 px-2">
-                    {todaysSellers.map((seller, index) => (
-                      <div key={seller.name} className="flex flex-col items-center space-y-2 min-w-[120px]">
-                        {/* Platsering ovanför cirkel */}
-                        <div className="flex items-center justify-center">
-                          <span className="text-lg font-bold">{getMedalIcon(index)}</span>
-                          <span className="text-sm font-bold text-slate-600 ml-1">#{index + 1}</span>
-                        </div>
-                        
-                        {/* Stor cirkel med profilbild */}
-                        <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-3 border-blue-300 shadow-lg hover:scale-105 transition-transform duration-200">
-                          {seller.imageUrl ? (
-                            <>
-                              {console.log(`📸 Rendering image for ${seller.name}:`, seller.imageUrl)}
-                              <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
-                            </>
-                          ) : (
-                            <span className="text-2xl font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
-                        
-                        {/* Namn och belopp under cirkel */}
-                        <div className="text-center">
-                          <p className="font-bold text-slate-800 text-sm leading-tight">{seller.name}</p>
-                          <p className="text-base font-bold text-blue-700 leading-tight">{formatCurrency(seller.amount)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Mitten kolumn - Säljmål (om aktiverat) */}
-            {settings.goals_enabled === 'true' && sellers.filter(s => s.monthly_goal > 0).length > 0 && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Månadens säljmål</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="space-y-2">
-                    {sellers.filter(seller => seller.monthly_goal > 0).map((seller) => {
-                      const sellerMonthSales = topSellers.find(s => s.name === seller.name)?.amount || 0;
-                      const progress = Math.min((sellerMonthSales / seller.monthly_goal) * 100, 100);
-                      
-                      return (
-                        <div key={seller.id} className="p-2 rounded bg-blue-50">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              {seller.profile_image_url ? (
-                                <img src={seller.profile_image_url} alt={seller.name} className="w-6 h-6 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-blue-200 flex items-center justify-center">
-                                  <span className="text-xs font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
-                                </div>
-                              )}
-                              <span className="font-semibold text-slate-800 text-xs">{seller.name}</span>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs text-slate-600">{formatCurrency(sellerMonthSales)} / {formatCurrency(seller.monthly_goal)}</div>
-                              <div className="text-xs text-slate-500">{progress.toFixed(1)}%</div>
+        {/* Huvudlayout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Dagens försäljning - Cirkelvy */}
+          <Card className="card-shadow border-0 hover-scale">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl text-primary flex items-center justify-center gap-2">
+                <DollarSign className="w-6 h-6" />
+                Dagens försäljning
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {salesData.dailySales.length > 0 ? (
+                <div className="relative h-80 flex items-center justify-center">
+                  {salesData.dailySales.map((seller, index) => {
+                    const angle = (index / salesData.dailySales.length) * 2 * Math.PI;
+                    const radius = 120;
+                    const x = Math.cos(angle) * radius + 150;
+                    const y = Math.sin(angle) * radius + 150;
+                    
+                    return (
+                      <div
+                        key={seller.seller_id || seller.seller_name}
+                        className="absolute transform -translate-x-1/2 -translate-y-1/2 hover-scale"
+                        style={{ left: x, top: y }}
+                      >
+                        <div className="text-center space-y-2">
+                          <div className="relative">
+                            {renderSellerAvatar(seller, 'md')}
+                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">
+                              {index + 1}
                             </div>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all duration-500 ease-out ${
-                                progress >= 100 ? 'bg-green-500' : progress >= 75 ? 'bg-blue-500' : progress >= 50 ? 'bg-yellow-500' : 'bg-red-400'
-                              }`}
-                              style={{ width: `${progress}%` }}
-                            />
+                          <div className="bg-white rounded-lg p-2 card-shadow min-w-[100px]">
+                            <p className="font-semibold text-sm text-center text-primary">
+                              {seller.seller_name}
+                            </p>
+                            <p className="text-xs text-center text-muted-foreground">
+                              {formatCurrency(seller.total)}
+                            </p>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Höger kolumn - Utmaningar (om aktiverat) */}
-            {activeChallenges.length > 0 && settings.challenges_enabled === 'true' && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Dagliga utmaningar</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="space-y-2">
-                    {activeChallenges.map((challenge) => (
-                      <div key={challenge.id} className="p-2 rounded bg-yellow-50 border border-yellow-200">
-                        <h4 className="text-sm font-bold text-slate-800 mb-1">{challenge.title}</h4>
-                        <p className="text-xs text-slate-600 mb-2">{challenge.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500">Mål:</span>
-                          <span className="text-sm font-bold text-blue-700">{formatCurrency(challenge.target_amount)}</span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <DollarSign className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Ingen försäljning registrerad idag</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Månadens toppsäljare - Kompakt version */}
-            {topSellers.length > 0 && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Månadens toppsäljare</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="space-y-2">
-                    {topSellers.slice(0, 5).map((seller, index) => (
-                      <div key={seller.name} className="flex items-center justify-between p-2 rounded bg-blue-50">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{getMedalIcon(index)}</span>
-                          <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center overflow-hidden border border-blue-300">
-                            {seller.imageUrl ? (
-                              <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <span className="text-xs font-bold text-black">{seller.name.charAt(0).toUpperCase()}</span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-800 text-sm">{seller.name}</p>
-                            <p className="text-xs text-slate-500">#{index + 1}</p>
-                          </div>
+          {/* Månadens topplista */}
+          <Card className="card-shadow border-0 hover-scale">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl text-primary flex items-center justify-center gap-2">
+                <Trophy className="w-6 h-6" />
+                Månadens topplista
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {salesData.topSellers.length > 0 ? (
+                <div className="space-y-4">
+                  {salesData.topSellers.map((seller, index) => (
+                    <div 
+                      key={seller.seller_id || seller.seller_name} 
+                      className="flex items-center justify-between p-4 rounded-lg bg-accent/10 hover:bg-accent/20 smooth-transition hover-scale"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="relative">
+                          {renderSellerAvatar(seller, 'sm')}
+                          <Badge 
+                            variant={index === 0 ? "default" : "secondary"} 
+                            className={`absolute -top-1 -right-1 text-xs ${
+                              index === 0 ? 'bg-yellow-500 text-white' : ''
+                            }`}
+                          >
+                            {index + 1}
+                          </Badge>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-blue-700">{formatCurrency(seller.amount)}</p>
-                          <p className="text-xs text-slate-500">månaden</p>
+                        <div>
+                          <p className="font-semibold text-foreground">{seller.seller_name}</p>
+                          <p className="text-sm text-muted-foreground">Månadstotal</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                      <div className="text-right">
+                        <p className="font-bold text-lg text-primary">{formatCurrency(seller.total)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Trophy className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Ingen försäljning registrerad denna månad</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Footer med navigation */}
+        <div className="text-center mt-12 space-y-4">
+          <div className="flex justify-center space-x-6">
+            <a 
+              href="/seller" 
+              className="story-link text-primary hover:text-primary-glow font-medium smooth-transition"
+            >
+              Rapportera försäljning →
+            </a>
+            <a 
+              href="/admin" 
+              className="story-link text-primary hover:text-primary-glow font-medium smooth-transition"
+            >
+              Adminpanel →
+            </a>
           </div>
+          <p className="text-sm text-muted-foreground">
+            ID-Bevakarna Säljsystem v2.0 - Optimerat för prestanda
+          </p>
+          {!audioInitialized && (
+            <p className="text-xs text-warning">
+              🎧 Ljudsystem initieras...
+            </p>
+          )}
         </div>
       </div>
     </div>
