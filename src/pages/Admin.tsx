@@ -791,6 +791,74 @@ const Admin = () => {
               </CardContent>
             </Card>
 
+            {/* Celebration Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  🎉 Firande-inställningar
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="celebration-enabled">Aktivera firande</Label>
+                    <Switch
+                      id="celebration-enabled"
+                      checked={settings.celebration_enabled === 'true'}
+                      onCheckedChange={(checked) => handleSettingChange('celebration_enabled', checked.toString())}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-bubble">Visa bubble-animation</Label>
+                    <Switch
+                      id="show-bubble"
+                      checked={settings.show_bubble === 'true'}
+                      onCheckedChange={(checked) => handleSettingChange('show_bubble', checked.toString())}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-confetti">Visa konfetti</Label>
+                    <Switch
+                      id="show-confetti"
+                      checked={settings.show_confetti === 'true'}
+                      onCheckedChange={(checked) => handleSettingChange('show_confetti', checked.toString())}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="play-sound">Spela ljud</Label>
+                    <Switch
+                      id="play-sound"
+                      checked={settings.play_sound === 'true'}
+                      onCheckedChange={(checked) => handleSettingChange('play_sound', checked.toString())}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="special-effect">Specialeffekter för ledare</Label>
+                    <Switch
+                      id="special-effect"
+                      checked={settings.special_effect === 'true'}
+                      onCheckedChange={(checked) => handleSettingChange('special_effect', checked.toString())}
+                    />
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-4 bg-accent/10 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Förklaring:</strong><br />
+                    • <strong>Aktivera firande:</strong> Huvudswitch för alla celebration-effekter<br />
+                    • <strong>Bubble-animation:</strong> Visar säljares profilbild med animerad popup<br />
+                    • <strong>Konfetti:</strong> Regnar konfetti över skärmen<br />
+                    • <strong>Spela ljud:</strong> Spelar säljarens uppladdade MP3-fil<br />
+                    • <strong>Specialeffekter:</strong> Extra guld-konfetti för dagens ledare
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Exportera data</CardTitle>
