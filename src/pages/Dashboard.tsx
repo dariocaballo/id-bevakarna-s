@@ -29,20 +29,25 @@ const Dashboard = () => {
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   
   // Handle new sales with audio playback and celebration
-  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller, settings?: { [key: string]: any }) => {
+  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
     console.log('🔊 New sale detected:', sale.seller_name, sale.amount);
+    console.log('🎵 Attempting to play sound for sale...');
     
     // Trigger celebration overlay
     setCelebrationSale(sale);
     
-    // Play seller sound if enabled
-    if (!settings || settings.play_sound !== false) {
+    // Play seller sound - always attempt unless explicitly disabled in settings
+    try {
       const soundPlayed = await playSellerSound(sale.seller_id, sale.seller_name);
       
-      if (!soundPlayed) {
-        console.log('🎵 No custom sound played, using fallback applause');
+      if (soundPlayed) {
+        console.log('✅ Successfully played sound for', sale.seller_name);
+      } else {
+        console.log('🎵 No custom sound played for', sale.seller_name, '- using fallback applause');
         // Optional: Add fallback sound here if needed
       }
+    } catch (error) {
+      console.error('❌ Error playing sound for', sale.seller_name, ':', error);
     }
   }, [playSellerSound]);
 
