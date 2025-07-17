@@ -888,6 +888,54 @@ const Admin = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>🎉 Firande-effekter</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="celebration-enabled">Aktivera firande</Label>
+                  <Switch
+                    id="celebration-enabled"
+                    checked={settings.celebration_enabled === true}
+                    onCheckedChange={(checked) => handleSettingChange('celebration_enabled', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="show-bubble">Visa bubble med säljarens bild</Label>
+                  <Switch
+                    id="show-bubble"
+                    checked={settings.show_bubble === true}
+                    onCheckedChange={(checked) => handleSettingChange('show_bubble', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="show-confetti">Visa konfetti</Label>
+                  <Switch
+                    id="show-confetti"
+                    checked={settings.show_confetti === true}
+                    onCheckedChange={(checked) => handleSettingChange('show_confetti', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="play-sound">Spela ljud</Label>
+                  <Switch
+                    id="play-sound"
+                    checked={settings.play_sound === true}
+                    onCheckedChange={(checked) => handleSettingChange('play_sound', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="special-effect">Specialeffekt vid måluppfyllelse</Label>
+                  <Switch
+                    id="special-effect"
+                    checked={settings.special_effect === true}
+                    onCheckedChange={(checked) => handleSettingChange('special_effect', checked)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

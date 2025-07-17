@@ -5,6 +5,7 @@ import { playApplauseSound } from '@/utils/sound';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAudioManager } from '@/hooks/useAudioManager';
 import { useImageCache } from '@/hooks/useImageCache';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 
 interface Sale {
   id: string;
@@ -25,17 +26,23 @@ interface Seller {
 const Dashboard = () => {
   const { initializeAudio, preloadSellerSounds, playSellerSound, isInitialized } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
+  const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   
-  // Handle new sales with audio playback
-  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
+  // Handle new sales with audio playback and celebration
+  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller, settings?: { [key: string]: any }) => {
     console.log('🔊 New sale detected:', sale.seller_name, sale.amount);
     
-    // Play seller sound
-    const soundPlayed = await playSellerSound(sale.seller_id, sale.seller_name);
+    // Trigger celebration overlay
+    setCelebrationSale(sale);
     
-    if (!soundPlayed) {
-      console.log('🎵 No custom sound played, using fallback applause');
-      // Optional: Add fallback sound here if needed
+    // Play seller sound if enabled
+    if (!settings || settings.play_sound !== false) {
+      const soundPlayed = await playSellerSound(sale.seller_id, sale.seller_name);
+      
+      if (!soundPlayed) {
+        console.log('🎵 No custom sound played, using fallback applause');
+        // Optional: Add fallback sound here if needed
+      }
     }
   }, [playSellerSound]);
 
@@ -153,6 +160,11 @@ const Dashboard = () => {
     return settings.night_mode_enabled === 'true' && (hour >= 18 || hour <= 9);
   };
 
+  // Get seller info for celebration
+  const getSeller = (sale: Sale) => {
+    return sellers.find(s => s.id === sale.seller_id);
+  };
+
   return (
     <div className={`h-screen overflow-hidden p-3 ${
       isNightTime() 
@@ -169,6 +181,15 @@ const Dashboard = () => {
             isNightTime() ? 'text-slate-300' : 'text-blue-600'
           }`}>Sales Dashboard</h2>
         </div>
+
+      {/* Celebration Overlay */}
+      <CelebrationOverlay
+        sale={celebrationSale}
+        sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
+        onComplete={() => setCelebrationSale(null)}
+        showBubble={settings.show_bubble !== false}
+        showConfetti={settings.show_confetti !== false}
+      />
 
         {/* TV-Optimerad Layout - Flex Container */}
         <div className="flex-1 flex flex-col gap-2 overflow-hidden">
