@@ -6,11 +6,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Suspense, lazy, Component, ReactNode } from "react";
 
 // Lazy load pages for optimal loading performance
-const Index = lazy(() => import("./pages/Index"));
-const Seller = lazy(() => import("./pages/Seller"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Admin = lazy(() => import("./pages/Admin"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+const Index = lazy(() => import("./pages/Index").catch(() => ({ default: () => <div>Error loading page</div> })));
+const Seller = lazy(() => import("./pages/Seller").catch(() => ({ default: () => <div>Error loading page</div> })));
+const Dashboard = lazy(() => import("./pages/Dashboard").catch(() => ({ default: () => <div>Error loading page</div> })));
+const Admin = lazy(() => import("./pages/Admin").catch(() => ({ default: () => <div>Error loading page</div> })));
+const NotFound = lazy(() => import("./pages/NotFound").catch(() => ({ default: () => <div>Error loading page</div> })));
 
 // Loading fallback component
 const LoadingFallback = () => (
@@ -22,12 +22,24 @@ const LoadingFallback = () => (
   </div>
 );
 
-// Error boundary component
+// Optimized QueryClient configuration
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30000, // Consider data fresh for 30 seconds
+      gcTime: 300000, // Keep in cache for 5 minutes
+      retry: 1, // Only retry once on failure
+      refetchOnWindowFocus: false, // Don't refetch on window focus for TV usage
+    },
+  },
+});
+
+// Simple error boundary
 class ErrorBoundary extends Component<
-  { children: ReactNode; fallback?: (error: Error, retry: () => void) => ReactNode },
+  { children: ReactNode },
   { hasError: boolean; error: Error | null }
 > {
-  constructor(props: { children: ReactNode; fallback?: (error: Error, retry: () => void) => ReactNode }) {
+  constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -41,12 +53,7 @@ class ErrorBoundary extends Component<
   }
 
   render() {
-    if (this.state.hasError && this.state.error) {
-      const retry = () => {
-        this.setState({ hasError: false, error: null });
-        window.location.reload();
-      };
-
+    if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-accent/20 to-background">
           <div className="text-center max-w-md mx-auto p-6">
@@ -55,15 +62,11 @@ class ErrorBoundary extends Component<
               Ett oväntat fel inträffade. Försök ladda om sidan.
             </p>
             <button 
-              onClick={retry}
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
             >
-              Försök igen
+              Ladda om sidan
             </button>
-            <details className="mt-4 text-left">
-              <summary className="cursor-pointer text-sm text-muted-foreground">Teknisk information</summary>
-              <pre className="mt-2 text-xs bg-muted p-2 rounded overflow-auto">{this.state.error.message}</pre>
-            </details>
           </div>
         </div>
       );
@@ -72,18 +75,6 @@ class ErrorBoundary extends Component<
     return this.props.children;
   }
 }
-
-// Optimized QueryClient configuration
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30000, // Consider data fresh for 30 seconds
-      gcTime: 300000, // Keep in cache for 5 minutes (updated from cacheTime)
-      retry: 1, // Only retry once on failure
-      refetchOnWindowFocus: false, // Don't refetch on window focus for TV usage
-    },
-  },
-});
 
 const App = () => (
   <ErrorBoundary>
@@ -98,7 +89,6 @@ const App = () => (
               <Route path="/seller" element={<Seller />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin" element={<Admin />} />
-              {/* Catch-all route for 404 */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
