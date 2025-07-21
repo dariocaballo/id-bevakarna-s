@@ -1,0 +1,26 @@
+# Netlify redirects file for SPA routing
+# This ensures that all routes (including /dashboard) are handled by the React app
+
+/*    /index.html   200
+
+# Specific routes with caching optimization
+/dashboard    /index.html   200
+/seller       /index.html   200
+/admin        /index.html   200
+
+# Handle API routes if any (future proofing)
+/api/*        /api/:splat   200
+
+# Static assets should be served directly
+/*.css        /:splat       200
+/*.js         /:splat       200
+/*.png        /:splat       200
+/*.jpg        /:splat       200
+/*.jpeg       /:splat       200
+/*.gif        /:splat       200
+/*.svg        /:splat       200
+/*.ico        /:splat       200
+/*.woff       /:splat       200
+/*.woff2      /:splat       200
+/*.ttf        /:splat       200
+/*.eot        /:splat       200

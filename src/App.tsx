@@ -31,15 +31,34 @@ const NotFound = lazy(() => import("./pages/NotFound").catch(err => {
   return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Sidan kunde inte hittas</p></div> };
 }));
 
-// Loading fallback component
+// Enhanced loading fallback for TV displays
 const LoadingFallback = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-accent/20 to-background">
     <div className="text-center">
-      <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-      <p className="text-muted-foreground">Laddar...</p>
+      <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-6"></div>
+      <p className="text-xl text-muted-foreground mb-2">Laddar dashboard...</p>
+      <p className="text-sm text-muted-foreground/60">Förbereder för TV-visning</p>
+      
+      {/* Progress indicator for slow connections */}
+      <div className="w-64 h-1 bg-muted rounded-full mx-auto mt-4 overflow-hidden">
+        <div className="h-full bg-primary rounded-full animate-pulse" style={{
+          animation: 'loading-progress 3s ease-in-out infinite'
+        }}></div>
+      </div>
     </div>
   </div>
 );
+
+// Add CSS animation for loading progress
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes loading-progress {
+    0% { width: 0%; }
+    50% { width: 70%; }
+    100% { width: 100%; }
+  }
+`;
+document.head.appendChild(style);
 
 // Optimized QueryClient configuration
 const queryClient = new QueryClient({
@@ -105,8 +124,8 @@ const App = () => (
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/seller" element={<Seller />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/seller" element={<Seller />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
