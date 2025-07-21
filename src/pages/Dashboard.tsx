@@ -29,12 +29,7 @@ const Dashboard = () => {
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   
-  // Temporarily disable system stability hook to debug loading issues
-  // const systemStability = useSystemStability({
-  //   onConnectionIssue: () => console.warn('🚨 Connection issue detected'),
-  //   onMemoryWarning: () => console.warn('🧠 Memory warning - cleaning up'),
-  //   onPerformanceDrop: () => console.warn('📉 Performance drop detected')
-  // });
+  // System stability monitoring removed for debugging
   
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
@@ -73,24 +68,8 @@ const Dashboard = () => {
     await preloadSellerSounds(updatedSellers);
   }, [preloadSellerSounds, ensureAudioContextReady]);
 
-  // Temporarily disable system stability monitoring for debugging
-  // const { performSystemHealthCheck } = useSystemStability({
-  //   onConnectionIssue: () => {
-  //     console.warn('🚨 System stability issue detected on TV display');
-  //     // Could trigger a visual indicator or notification
-  //   },
-  //   onMemoryWarning: () => {
-  //     console.warn('🚨 Memory warning for 24/7 operation');
-  //     // Could trigger garbage collection or optimization
-  //   },
-  //   onPerformanceDrop: () => {
-  //     console.warn('🚨 Performance drop detected on TV display');
-  //     // Could trigger performance optimization
-  //   }
-  // });
-  
   const performSystemHealthCheck = () => {
-    console.log('🛡️ Basic health check (system stability disabled for debugging)');
+    console.log('🛡️ Basic health check');
   };
 
   // Use enhanced realtime data hook with TV-optimized settings
