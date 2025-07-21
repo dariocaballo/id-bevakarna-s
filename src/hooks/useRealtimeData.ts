@@ -453,23 +453,43 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       }
     }, 20000); // More frequent heartbeat for TV displays
 
-    // Additional stability check every 10 minutes for long-term operation
+    // Additional stability check every 5 minutes for aggressive long-term operation
     stabilityCheckIntervalRef.current = setInterval(() => {
       console.log('🛡️ Performing deep stability check for 24/7 operation...');
       
-      // Force refresh if no updates in last 30 minutes
+      // Force refresh if no updates in last 15 minutes (reduced from 30)
       const timeSinceLastUpdate = Date.now() - lastDataUpdateRef.current;
-      if (timeSinceLastUpdate > 30 * 60 * 1000) {
-        console.warn('⚠️ No updates for 30 minutes, forcing refresh...');
-        refreshData();
+      if (timeSinceLastUpdate > 15 * 60 * 1000) {
+        console.warn('⚠️ No updates for 15 minutes, forcing aggressive refresh...');
+        // Force reconnect and refresh
+        reconnectRealtime();
+        setTimeout(() => refreshData(), 2000);
       }
       
-      // Check if subscription is still active
-      if (!channelRef.current || channelRef.current.state !== 'joined') {
-        console.warn('⚠️ Subscription not in joined state, reconnecting...');
+      // Check if subscription is still active with more detailed logging
+      if (!channelRef.current) {
+        console.warn('⚠️ No channel reference, reconnecting...');
         reconnectRealtime();
+      } else if (channelRef.current.state !== 'joined') {
+        console.warn(`⚠️ Subscription not in joined state (current: ${channelRef.current.state}), reconnecting...`);
+        reconnectRealtime();
+      } else {
+        console.log('✅ WebSocket channel healthy:', channelRef.current.state);
+        
+        // Send test broadcast to verify connection
+        try {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'stability_test',
+            payload: { timestamp: Date.now() }
+          });
+          console.log('✅ Stability test broadcast sent successfully');
+        } catch (error) {
+          console.warn('⚠️ Stability test broadcast failed:', error);
+          reconnectRealtime();
+        }
       }
-    }, 10 * 60 * 1000);
+    }, 5 * 60 * 1000); // More frequent checks every 5 minutes
 
     // Cleanup function
     return () => {

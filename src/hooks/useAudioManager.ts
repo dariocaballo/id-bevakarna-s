@@ -32,7 +32,7 @@ export const useAudioManager = () => {
     }
   }, []);
 
-  // Enhanced audio context management for 24/7 operation
+  // Enhanced audio context management for 24/7 operation with aggressive recovery
   const ensureAudioContextReady = useCallback(async () => {
     const now = Date.now();
     
@@ -43,34 +43,74 @@ export const useAudioManager = () => {
 
     if (audioManager.current.audioContext) {
       const state = audioManager.current.audioContext.state;
-      console.log(`🎵 Audio context state: ${state}`);
+      console.log(`🎵 Audio context state: ${state} at ${new Date().toISOString()}`);
       
       if (state === 'suspended') {
         console.log('🎵 Audio context suspended/interrupted, resuming for 24/7 operation...');
         try {
+          // Force user interaction if needed for autoplay policy
+          if (document.hidden === false) {
+            // Try to create a minimal user interaction
+            const silentClick = new MouseEvent('click', { bubbles: false });
+            document.dispatchEvent(silentClick);
+          }
+          
           await audioManager.current.audioContext.resume();
           console.log('✅ Audio context resumed successfully');
           
-          // Verify it's actually running
+          // Verify it's actually running with multiple checks
+          await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+          
           if (audioManager.current.audioContext.state === 'running') {
             console.log('✅ Audio context confirmed running');
+            
+            // Test audio capability with silent test
+            try {
+              const oscillator = audioManager.current.audioContext.createOscillator();
+              const gainNode = audioManager.current.audioContext.createGain();
+              gainNode.gain.setValueAtTime(0, audioManager.current.audioContext.currentTime);
+              oscillator.connect(gainNode);
+              gainNode.connect(audioManager.current.audioContext.destination);
+              oscillator.start();
+              oscillator.stop(audioManager.current.audioContext.currentTime + 0.001);
+              console.log('✅ Audio context test successful');
+            } catch (testError) {
+              console.warn('⚠️ Audio context test failed:', testError);
+            }
           } else {
-            console.warn('⚠️ Audio context not running after resume attempt');
+            console.warn('⚠️ Audio context not running after resume attempt, state:', audioManager.current.audioContext.state);
+            throw new Error('Audio context not running after resume');
           }
         } catch (error) {
           console.error('❌ Failed to resume audio context:', error);
           
-          // Try to recreate audio context if resume fails
+          // Aggressive recovery - recreate audio context
           try {
-            console.log('🔄 Attempting to recreate audio context...');
+            console.log('🔄 Attempting aggressive audio context recreation...');
+            if (audioManager.current.audioContext && audioManager.current.audioContext.state !== 'closed') {
+              await audioManager.current.audioContext.close();
+            }
+            
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             audioManager.current.audioContext = new AudioContextClass();
+            
+            // Wait for context to initialize
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            if (audioManager.current.audioContext.state === 'suspended') {
+              await audioManager.current.audioContext.resume();
+            }
+            
             audioManager.current.isInitialized = true;
-            console.log('✅ Audio context recreated successfully');
+            console.log('✅ Audio context aggressively recreated successfully, state:', audioManager.current.audioContext.state);
           } catch (recreateError) {
             console.error('❌ Failed to recreate audio context:', recreateError);
+            audioManager.current.isInitialized = false;
           }
         }
+      } else if (state === 'closed') {
+        console.log('🔄 Audio context closed, reinitializing...');
+        initializeAudio();
       }
     }
   }, [initializeAudio]);
@@ -180,20 +220,38 @@ export const useAudioManager = () => {
     }
   }, [ensureAudioContextReady]);
 
-  // Enhanced cleanup and periodic maintenance for 24/7 operation
+  // Enhanced cleanup and periodic maintenance for 24/7 operation with aggressive monitoring
   useEffect(() => {
-    // Periodic audio health check for long-term stability
+    // Aggressive audio health check for long-term stability
     const audioHealthInterval = setInterval(async () => {
-      console.log('🔍 Performing audio health check for 24/7 operation...');
+      console.log('🔍 Performing comprehensive audio health check for 24/7 operation...');
       
       if (audioManager.current.audioContext) {
         const state = audioManager.current.audioContext.state;
-        console.log(`🎵 Audio context health: ${state}`);
+        console.log(`🎵 Audio context health: ${state} at ${new Date().toISOString()}`);
         
-        if (state === 'suspended') {
-          console.log('🔧 Audio context needs attention, ensuring readiness...');
+        if (state === 'suspended' || state === 'closed') {
+          console.log('🔧 Audio context needs immediate attention, ensuring readiness...');
           await ensureAudioContextReady();
+        } else if (state === 'running') {
+          // Proactive test when running to ensure it still works
+          try {
+            const testOscillator = audioManager.current.audioContext.createOscillator();
+            const testGain = audioManager.current.audioContext.createGain();
+            testGain.gain.setValueAtTime(0, audioManager.current.audioContext.currentTime);
+            testOscillator.connect(testGain);
+            testGain.connect(audioManager.current.audioContext.destination);
+            testOscillator.start();
+            testOscillator.stop(audioManager.current.audioContext.currentTime + 0.001);
+            console.log('✅ Proactive audio test successful');
+          } catch (testError) {
+            console.warn('⚠️ Proactive audio test failed, reinitializing:', testError);
+            await ensureAudioContextReady();
+          }
         }
+      } else {
+        console.warn('⚠️ Audio context missing, reinitializing...');
+        initializeAudio();
       }
       
       // Check preloaded audio integrity
@@ -203,13 +261,90 @@ export const useAudioManager = () => {
       if (preloadedCount === 0) {
         console.warn('⚠️ No preloaded audio found, may need re-initialization');
       }
-    }, 5 * 60 * 1000); // Check every 5 minutes
+      
+      // Check if any preloaded audio is corrupted
+      let corruptedCount = 0;
+      audioManager.current.preloadedAudio.forEach((audio, sellerId) => {
+        if (audio.error || audio.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
+          console.warn(`⚠️ Corrupted audio detected for seller ${sellerId}`);
+          corruptedCount++;
+        }
+      });
+      
+      if (corruptedCount > 0) {
+        console.warn(`⚠️ Found ${corruptedCount} corrupted audio files, may need reloading`);
+      }
+    }, 2 * 60 * 1000); // More frequent checks every 2 minutes
+
+    // Very aggressive wake-up check for TV displays
+    const wakeUpInterval = setInterval(async () => {
+      console.log('⏰ Performing wake-up check for TV display...');
+      
+      // Force audio context to stay awake
+      if (audioManager.current.audioContext && audioManager.current.audioContext.state === 'running') {
+        try {
+          // Create silent audio to keep context active
+          const silentBuffer = audioManager.current.audioContext.createBuffer(1, 1, audioManager.current.audioContext.sampleRate);
+          const source = audioManager.current.audioContext.createBufferSource();
+          const gain = audioManager.current.audioContext.createGain();
+          
+          source.buffer = silentBuffer;
+          gain.gain.setValueAtTime(0, audioManager.current.audioContext.currentTime);
+          
+          source.connect(gain);
+          gain.connect(audioManager.current.audioContext.destination);
+          source.start();
+          
+          console.log('🎵 Silent audio pulse sent to keep context active');
+        } catch (error) {
+          console.warn('⚠️ Silent audio pulse failed:', error);
+          await ensureAudioContextReady();
+        }
+      }
+    }, 30 * 1000); // Every 30 seconds
+
+    // Visibility change handler for immediate recovery
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        console.log('👁️ Page became visible, checking audio context...');
+        await ensureAudioContextReady();
+      }
+    };
+
+    // Page focus handler for immediate recovery
+    const handlePageFocus = async () => {
+      console.log('🔍 Page focused, ensuring audio readiness...');
+      await ensureAudioContextReady();
+    };
+
+    // User interaction handler to maintain audio permissions
+    const handleUserInteraction = async () => {
+      if (audioManager.current.audioContext && audioManager.current.audioContext.state === 'suspended') {
+        console.log('👆 User interaction detected, resuming audio context...');
+        await ensureAudioContextReady();
+      }
+    };
+
+    // Add event listeners
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handlePageFocus);
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
 
     return () => {
       clearInterval(audioHealthInterval);
+      clearInterval(wakeUpInterval);
       
       // Enhanced cleanup
       console.log('🧹 Enhanced AudioManager cleanup...');
+      
+      // Remove event listeners
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handlePageFocus);
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
       
       // Clear all preloaded audio
       audioManager.current.preloadedAudio.clear();
@@ -222,7 +357,7 @@ export const useAudioManager = () => {
       audioManager.current.isInitialized = false;
       console.log('🎵 AudioManager cleaned up for 24/7 operation');
     };
-  }, [ensureAudioContextReady]);
+  }, [ensureAudioContextReady, initializeAudio]);
 
   return {
     initializeAudio,

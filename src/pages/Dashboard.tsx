@@ -164,6 +164,43 @@ const Dashboard = () => {
       console.log(`🎵 Expected ${preloadedCount} preloaded sounds for TV operation`);
     }, 2 * 60 * 1000); // Check every 2 minutes for TV
 
+    // Critical self-healing watchdog for audio/celebration failures
+    const selfHealingWatchdog = setInterval(async () => {
+      console.log('🛡️ Self-healing watchdog checking system integrity...');
+      
+      // Check if we've had sales but no celebrations recently
+      if (lastSale) {
+        const lastSaleTime = new Date(lastSale.timestamp).getTime();
+        const timeSinceLastSale = Date.now() - lastSaleTime;
+        
+        // If last sale was within 30 seconds but no current celebration, something failed
+        if (timeSinceLastSale < 30000 && !celebrationSale) {
+          console.warn('⚠️ Recent sale detected but no celebration - possible failure detected');
+          
+          // Force audio context recovery
+          await ensureAudioContextReady();
+          
+          // Force a brief test celebration to verify functionality
+          const testSale = { ...lastSale, seller_name: `Test - ${lastSale.seller_name}` };
+          handleNewSale(testSale, sellers.find(s => s.id === lastSale.seller_id));
+        }
+      }
+      
+      // Force audio context maintenance
+      await ensureAudioContextReady();
+      
+      // Check confetti capability
+      try {
+        const confetti = (window as any).confetti;
+        if (confetti) {
+          // Test confetti with minimal particles
+          confetti({ particleCount: 1, startVelocity: 0, spread: 0, origin: { x: -1, y: -1 } });
+        }
+      } catch (error) {
+        console.warn('⚠️ Confetti test failed:', error);
+      }
+    }, 60 * 1000); // Check every minute
+
     // Comprehensive system health check
     const systemHealthCheck = setInterval(() => {
       console.log('🛡️ Performing comprehensive system health check for 24/7 TV...');
@@ -181,6 +218,7 @@ const Dashboard = () => {
 
     return () => {
       clearInterval(audioHealthCheck);
+      clearInterval(selfHealingWatchdog);
       clearInterval(systemHealthCheck);
     };
   }, [ensureAudioContextReady, performSystemHealthCheck, sellers]);

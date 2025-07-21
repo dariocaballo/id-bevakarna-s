@@ -29,10 +29,26 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
 
     // Calculate celebration duration - sync with audio or use default
     const celebrationDuration = audioDuration || 3000; // Use audio duration or default 3 seconds
-    console.log(`🎉 Starting celebration for ${sale.seller_name} - Duration: ${celebrationDuration}ms`);
+    console.log(`🎉 Starting celebration for ${sale.seller_name} - Duration: ${celebrationDuration}ms at ${new Date().toISOString()}`);
 
-    // Start animation
-    setIsVisible(true);
+    // Force confetti initialization to prevent post-inactivity issues
+    if (showConfetti) {
+      try {
+        // Pre-initialize confetti canvas to prevent rendering issues after long inactivity
+        confetti({ particleCount: 1, startVelocity: 0, spread: 0, origin: { x: -1, y: -1 } });
+        console.log('✅ Confetti pre-initialized successfully');
+      } catch (error) {
+        console.warn('⚠️ Confetti pre-initialization failed:', error);
+      }
+    }
+
+    // Start animation with forced reflow to prevent rendering issues
+    requestAnimationFrame(() => {
+      setIsVisible(true);
+      console.log('✅ Celebration visibility set to true');
+    });
+
+    let confettiInterval: NodeJS.Timeout | null = null;
 
     // Trigger confetti if enabled - sync with audio duration
     if (showConfetti) {
@@ -43,37 +59,64 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
         return Math.random() * (max - min) + min;
       };
 
-      const interval = setInterval(() => {
+      // Start confetti with immediate first burst
+      try {
+        confetti({
+          ...defaults,
+          particleCount: 100,
+          origin: { x: 0.5, y: 0.5 }
+        });
+        console.log('✅ Initial confetti burst triggered');
+      } catch (error) {
+        console.warn('⚠️ Initial confetti burst failed:', error);
+      }
+
+      confettiInterval = setInterval(() => {
         const timeLeft = animationEnd - Date.now();
 
         if (timeLeft <= 0) {
-          return clearInterval(interval);
+          if (confettiInterval) clearInterval(confettiInterval);
+          return;
         }
 
-        const particleCount = 50 * (timeLeft / celebrationDuration);
+        const particleCount = Math.max(20, 50 * (timeLeft / celebrationDuration));
 
-        confetti({
-          ...defaults,
-          particleCount,
-          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
-        });
-        confetti({
-          ...defaults,
-          particleCount,
-          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
-        });
+        try {
+          confetti({
+            ...defaults,
+            particleCount: Math.floor(particleCount),
+            origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+          });
+          confetti({
+            ...defaults,
+            particleCount: Math.floor(particleCount),
+            origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+          });
+        } catch (error) {
+          console.warn('⚠️ Confetti rendering failed:', error);
+          if (confettiInterval) clearInterval(confettiInterval);
+        }
       }, 250);
     }
 
     // Hide celebration when audio finishes - sync with audio duration
     const timer = setTimeout(() => {
-      console.log(`🎉 Celebration ending for ${sale.seller_name}`);
+      console.log(`🎉 Celebration ending for ${sale.seller_name} at ${new Date().toISOString()}`);
+      
+      if (confettiInterval) {
+        clearInterval(confettiInterval);
+      }
+      
       setIsVisible(false);
-      setTimeout(onComplete, 300); // Wait for fade out
+      setTimeout(() => {
+        console.log(`🎉 Celebration complete for ${sale.seller_name}`);
+        onComplete();
+      }, 300); // Wait for fade out
     }, celebrationDuration);
 
     return () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      if (confettiInterval) clearInterval(confettiInterval);
     };
   }, [sale, showConfetti, onComplete, audioDuration]);
 
