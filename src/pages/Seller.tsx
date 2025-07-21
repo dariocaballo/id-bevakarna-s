@@ -114,10 +114,9 @@ const Seller = () => {
       const sellersData = data || [];
       setSellers(sellersData);
       
-      // Preload sounds and images when sellers are loaded
+      // Preload images only - NO sound preloading on seller page
       if (sellersData.length > 0) {
-        console.log('🎵 Preloading seller resources...');
-        preloadSellerSounds(sellersData);
+        console.log('🖼️ Preloading seller images...');
         
         const imageUrls = sellersData
           .map(seller => seller.profile_image_url)

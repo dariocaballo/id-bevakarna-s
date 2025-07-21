@@ -66,7 +66,7 @@ const Dashboard = () => {
     // Basic health check - logs removed for performance
   };
 
-  // Use enhanced realtime data hook with TV-optimized settings
+  // Use enhanced realtime data hook with TV-optimized settings - ONLY on dashboard
   const {
     totalToday,
     totalMonth,
@@ -78,7 +78,7 @@ const Dashboard = () => {
     settings,
     isLoading
   } = useRealtimeData({
-    onNewSale: handleNewSale,
+    onNewSale: handleNewSale, // Only trigger audio/celebration on dashboard
     onSellerUpdate: handleSellerUpdate,
     enableAutoRefresh: true,
     refreshInterval: 10000 // More frequent updates for TV display (10 seconds)

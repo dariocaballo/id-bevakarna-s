@@ -5,12 +5,31 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Suspense, lazy, Component, ReactNode } from "react";
 
-// Lazy load pages for optimal loading performance
-const Index = lazy(() => import("./pages/Index").catch(() => ({ default: () => <div>Error loading page</div> })));
-const Seller = lazy(() => import("./pages/Seller").catch(() => ({ default: () => <div>Error loading page</div> })));
-const Dashboard = lazy(() => import("./pages/Dashboard").catch(() => ({ default: () => <div>Error loading page</div> })));
-const Admin = lazy(() => import("./pages/Admin").catch(() => ({ default: () => <div>Error loading page</div> })));
-const NotFound = lazy(() => import("./pages/NotFound").catch(() => ({ default: () => <div>Error loading page</div> })));
+// Robust lazy loading with proper error handling and loading states
+const Index = lazy(() => import("./pages/Index").catch(err => {
+  console.error('Failed to load Index page:', err);
+  return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda startsidan</p></div> };
+}));
+
+const Dashboard = lazy(() => import("./pages/Dashboard").catch(err => {
+  console.error('Failed to load Dashboard page:', err);
+  return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda dashboard</p></div> };
+}));
+
+const Seller = lazy(() => import("./pages/Seller").catch(err => {
+  console.error('Failed to load Seller page:', err);
+  return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda säljarsidan</p></div> };
+}));
+
+const Admin = lazy(() => import("./pages/Admin").catch(err => {
+  console.error('Failed to load Admin page:', err);
+  return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda admin</p></div> };
+}));
+
+const NotFound = lazy(() => import("./pages/NotFound").catch(err => {
+  console.error('Failed to load NotFound page:', err);
+  return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Sidan kunde inte hittas</p></div> };
+}));
 
 // Loading fallback component
 const LoadingFallback = () => (
