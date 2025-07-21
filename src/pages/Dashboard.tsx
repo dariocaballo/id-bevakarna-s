@@ -33,9 +33,6 @@ const Dashboard = () => {
   
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
-    console.log('🔊 New sale detected for 24/7 system:', sale.seller_name, sale.amount, 'at', new Date().toISOString());
-    console.log('🎵 Attempting to play sound for sale...');
-    
     // Ensure audio is ready for 24/7 operation
     await ensureAudioContextReady();
     
@@ -44,32 +41,29 @@ const Dashboard = () => {
       const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
       
       if (audioResult.played) {
-        console.log('✅ Successfully played sound for', sale.seller_name);
         // Set celebration duration to match audio duration
         setCelebrationAudioDuration(audioResult.duration);
       } else {
-        console.log('🎵 No custom sound played for', sale.seller_name);
         // Use default duration if no audio
         setCelebrationAudioDuration(3000);
       }
     } catch (error) {
-      console.error('❌ Error playing sound for', sale.seller_name, ':', error);
+      console.error('Error playing sound:', error);
       setCelebrationAudioDuration(3000); // Default duration on error
     }
     
-    // Trigger celebration overlay (will use the audio duration we just set)
+    // Trigger celebration overlay
     setCelebrationSale(sale);
   }, [playSellerSound, ensureAudioContextReady]);
 
   // Handle seller updates for audio reloading in 24/7 operation
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
-    console.log('🔄 Sellers updated in 24/7 system, reloading audio files...');
     await ensureAudioContextReady(); // Ensure audio is ready before reloading
     await preloadSellerSounds(updatedSellers);
   }, [preloadSellerSounds, ensureAudioContextReady]);
 
   const performSystemHealthCheck = () => {
-    console.log('🛡️ Basic health check');
+    // Basic health check - logs removed for performance
   };
 
   // Use enhanced realtime data hook with TV-optimized settings
@@ -93,8 +87,6 @@ const Dashboard = () => {
   // Enhanced initialization for 24/7 TV operation
   useEffect(() => {
     if (sellers.length === 0) return;
-
-    console.log('🎵 Initializing enhanced audio and resources for 24/7 TV operation...');
     
     // Enhanced audio initialization for TV displays
     const handleUserInteraction = async () => {
@@ -115,20 +107,16 @@ const Dashboard = () => {
     // Immediate initialization attempt (for auto-started systems)
     initializeAudio();
     
-    // Preload seller sounds with verification
-    preloadSellerSounds(sellers).then(() => {
-      console.log('✅ All seller sounds preloaded for 24/7 operation');
-    });
+    // Preload seller sounds
+    preloadSellerSounds(sellers);
     
-    // Preload seller images with optimization
+    // Preload seller images
     const imageUrls = sellers
       .map(seller => seller.profile_image_url)
       .filter(url => url) as string[];
     
     if (imageUrls.length > 0) {
-      preloadImages(imageUrls).then(() => {
-        console.log('✅ All seller images preloaded for 24/7 operation');
-      });
+      preloadImages(imageUrls);
     }
     
     return () => {
@@ -139,78 +127,27 @@ const Dashboard = () => {
     };
   }, [sellers, initializeAudio, ensureAudioContextReady, preloadSellerSounds, preloadImages]);
 
-  // Comprehensive monitoring for 24/7 TV operation
+  // Simplified monitoring for reliable 24/7 operation
   useEffect(() => {
-    // Enhanced audio health monitoring for TV displays
+    // Basic audio health check - simplified for reliability
     const audioHealthCheck = setInterval(async () => {
-      console.log('🔍 Comprehensive audio health check for 24/7 TV operation...');
-      await ensureAudioContextReady();
-      
-      // Verify preloaded sounds are still available
-      const preloadedCount = sellers.filter(seller => 
-        seller.sound_file_url // Only count sellers with sound files
-      ).length;
-      console.log(`🎵 Expected ${preloadedCount} preloaded sounds for TV operation`);
-    }, 2 * 60 * 1000); // Check every 2 minutes for TV
-
-    // Critical self-healing watchdog for audio/celebration failures
-    const selfHealingWatchdog = setInterval(async () => {
-      console.log('🛡️ Self-healing watchdog checking system integrity...');
-      
-      // Check if we've had sales but no celebrations recently
-      if (lastSale) {
-        const lastSaleTime = new Date(lastSale.timestamp).getTime();
-        const timeSinceLastSale = Date.now() - lastSaleTime;
-        
-        // If last sale was within 30 seconds but no current celebration, something failed
-        if (timeSinceLastSale < 30000 && !celebrationSale) {
-          console.warn('⚠️ Recent sale detected but no celebration - possible failure detected');
-          
-          // Force audio context recovery
-          await ensureAudioContextReady();
-          
-          // Force a brief test celebration to verify functionality
-          const testSale = { ...lastSale, seller_name: `Test - ${lastSale.seller_name}` };
-          handleNewSale(testSale, sellers.find(s => s.id === lastSale.seller_id));
-        }
-      }
-      
-      // Force audio context maintenance
-      await ensureAudioContextReady();
-      
-      // Check confetti capability
       try {
-        const confetti = (window as any).confetti;
-        if (confetti) {
-          // Test confetti with minimal particles
-          confetti({ particleCount: 1, startVelocity: 0, spread: 0, origin: { x: -1, y: -1 } });
-        }
+        await ensureAudioContextReady();
       } catch (error) {
-        console.warn('⚠️ Confetti test failed:', error);
+        console.warn('Audio context issue:', error);
       }
-    }, 60 * 1000); // Check every minute
+    }, 2 * 60 * 1000); // Check every 2 minutes
 
-    // Comprehensive system health check
+    // Basic system health monitoring
     const systemHealthCheck = setInterval(() => {
-      console.log('🛡️ Performing comprehensive system health check for 24/7 TV...');
       performSystemHealthCheck();
-      
-      // Additional TV-specific checks
-      if (document.hidden) {
-        console.warn('⚠️ Document is hidden - may affect TV display');
-      }
-      
-      if (!document.hasFocus()) {
-        console.warn('⚠️ Document lost focus - may affect TV interaction');
-      }
-    }, 3 * 60 * 1000); // Check every 3 minutes for TV
+    }, 5 * 60 * 1000); // Check every 5 minutes
 
     return () => {
       clearInterval(audioHealthCheck);
-      clearInterval(selfHealingWatchdog);
       clearInterval(systemHealthCheck);
     };
-  }, [ensureAudioContextReady, performSystemHealthCheck, sellers]);
+  }, [ensureAudioContextReady, performSystemHealthCheck]);
 
   // TV-specific display optimization
   useEffect(() => {
@@ -236,8 +173,6 @@ const Dashboard = () => {
 
   // Optimized image rendering with cache and fallback
   const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-20 h-20") => {
-    console.log('📸 Rendering image for', seller.name + ':', seller.imageUrl);
-    
     if (!seller.imageUrl) {
       return (
         <span className="text-lg font-bold text-slate-800">
@@ -254,16 +189,12 @@ const Dashboard = () => {
         alt={seller.name}
         className={`${size} object-cover`}
         onError={(e) => {
-          console.error('❌ Image failed to load for', seller.name);
           // Hide broken image and show fallback
           e.currentTarget.style.display = 'none';
           const fallback = e.currentTarget.nextElementSibling as HTMLElement;
           if (fallback) {
             fallback.style.display = 'flex';
           }
-        }}
-        onLoad={() => {
-          console.log('✅ Image loaded successfully for', seller.name);
         }}
       />
     );
@@ -409,17 +340,14 @@ const Dashboard = () => {
                           <span className="text-sm font-bold text-slate-600 ml-1">#{index + 1}</span>
                         </div>
                         
-                        {/* Stor cirkel med profilbild */}
-                        <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-3 border-blue-300 shadow-lg hover:scale-105 transition-transform duration-200">
-                          {seller.imageUrl ? (
-                            <>
-                              {console.log(`📸 Rendering image for ${seller.name}:`, seller.imageUrl)}
-                              <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
-                            </>
-                          ) : (
-                            <span className="text-2xl font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
+                         {/* Stor cirkel med profilbild */}
+                         <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-3 border-blue-300 shadow-lg hover:scale-105 transition-transform duration-200">
+                           {seller.imageUrl ? (
+                             <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
+                           ) : (
+                             <span className="text-2xl font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
+                           )}
+                         </div>
                         
                         {/* Namn och belopp under cirkel */}
                         <div className="text-center">

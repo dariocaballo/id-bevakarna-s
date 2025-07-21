@@ -1,9 +1,17 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, Users, BarChart3, ArrowRight } from 'lucide-react';
-import logoImage from '@/assets/id-bevakarna-logo.png';
+import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
 
 const Index = () => {
+  // Preload critical routes for better performance
+  useEffect(() => {
+    // Preload dashboard and seller pages
+    import('./Dashboard');
+    import('./Seller');
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-background">
       {/* Header */}
@@ -41,10 +49,10 @@ const Index = () => {
                 asChild
                 className="w-full hero-gradient text-white primary-shadow smooth-transition hover:scale-105"
               >
-                <a href="/seller" className="flex items-center justify-center gap-2">
+                <Link to="/seller" className="flex items-center justify-center gap-2">
                   Starta säljprogram
                   <ArrowRight className="w-4 h-4" />
-                </a>
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -66,10 +74,10 @@ const Index = () => {
                 variant="outline"
                 className="w-full border-success text-success hover:success-gradient hover:text-white smooth-transition hover:scale-105"
               >
-                <a href="/dashboard" className="flex items-center justify-center gap-2">
+                <Link to="/dashboard" className="flex items-center justify-center gap-2">
                   Öppna dashboard
                   <ArrowRight className="w-4 h-4" />
-                </a>
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -123,7 +131,7 @@ const Index = () => {
             size="sm"
             className="text-xs"
           >
-            <a href="/admin">🔐 Admin Panel</a>
+            <Link to="/admin">🔐 Admin Panel</Link>
           </Button>
         </div>
       </div>
