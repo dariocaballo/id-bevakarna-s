@@ -1,10 +1,13 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, Users, BarChart3, ArrowRight } from 'lucide-react';
+import { TrendingUp, Users, BarChart3, ArrowRight, LogIn, LogOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
 
 const Index = () => {
+  const { user, signOut } = useAuth();
+
   // Preload critical routes for better performance
   useEffect(() => {
     // Preload dashboard and seller pages
@@ -15,7 +18,24 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-background">
       {/* Header */}
-      <div className="text-center pt-16 pb-12">
+      <div className="text-center pt-16 pb-12 relative">
+        {/* Auth button in top right */}
+        <div className="absolute top-4 right-4">
+          {user ? (
+            <Button onClick={signOut} variant="outline" className="flex items-center gap-2">
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="flex items-center gap-2">
+              <Link to="/auth">
+                <LogIn className="h-4 w-4" />
+                Sign In
+              </Link>
+            </Button>
+          )}
+        </div>
+
         <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white p-2 card-shadow">
           <img 
             src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 

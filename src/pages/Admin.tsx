@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus, LogOut } from 'lucide-react';
 
 
 interface Seller {
@@ -42,8 +44,7 @@ interface DashboardSetting {
 
 const Admin = () => {
   const { toast } = useToast();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
+  const { user, isAdmin, loading: authLoading, signOut } = useAuth();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [challenges, setChallenges] = useState<DailyChallenge[]>([]);
   const [settings, setSettings] = useState<{ [key: string]: any }>({});
@@ -52,26 +53,22 @@ const Admin = () => {
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<DailyChallenge | null>(null);
 
-  // Authentication
-  const handleLogin = () => {
-    if (password === 'admin123') {
-      setIsAuthenticated(true);
-      toast({
-        title: "Inloggning lyckades",
-        description: "Välkommen till adminpanelen!"
-      });
-    } else {
-      toast({
-        title: "Fel lösenord",
-        description: "Vänligen försök igen.",
-        variant: "destructive"
-      });
-    }
+  // Redirect if not authenticated or not admin
+  if (!authLoading && (!user || !isAdmin)) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast({
+      title: "Utloggad",
+      description: "Du har loggats ut från adminpanelen."
+    });
   };
 
   // Load data with improved error handling and performance
   useEffect(() => {
-    if (isAuthenticated) {
+    if (user && isAdmin) {
       console.log('📊 Loading admin data...');
       Promise.all([
         loadSellers(),
@@ -88,7 +85,7 @@ const Admin = () => {
         });
       });
     }
-  }, [isAuthenticated]);
+  }, [user, isAdmin]);
 
   const loadSellers = async () => {
     try {
@@ -401,37 +398,13 @@ const Admin = () => {
   };
 
 
-  if (!isAuthenticated) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-4">
-              <img 
-                src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
-                alt="ID Bevakarna" 
-                className="h-16 w-auto"
-              />
-            </div>
-            <CardTitle className="text-2xl text-blue-800">Admin Panel</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">Lösenord</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-                placeholder="Ange lösenord"
-              />
-            </div>
-            <Button onClick={handleLogin} className="w-full">
-              Logga in
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -440,11 +413,20 @@ const Admin = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 text-center">
-          <img 
-            src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
-            alt="ID Bevakarna" 
-            className="h-12 w-auto mx-auto mb-4"
-          />
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex-1"></div>
+            <img 
+              src="/lovable-uploads/a4efd036-dc1e-420a-8621-0fe448423e2f.png" 
+              alt="ID Bevakarna" 
+              className="h-12 w-auto mx-auto"
+            />
+            <div className="flex-1 flex justify-end">
+              <Button onClick={handleSignOut} variant="outline" className="flex items-center gap-2">
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </Button>
+            </div>
+          </div>
           <h1 className="text-4xl font-bold text-blue-800 mb-2">Admin Panel</h1>
           <p className="text-blue-600">Konfigurera och hantera ert säljdashboard</p>
         </div>
