@@ -115,17 +115,36 @@ export const useAudioManager = () => {
     }
   }, [initializeAudio]);
 
-  // Preload seller sounds into memory
+  // Enhanced preload with live update support for seller sounds
   const preloadSellerSounds = useCallback(async (sellers: Array<{id: string, sound_file_url?: string, name: string}>) => {
-    console.log('🎵 Starting to preload seller sounds:', sellers.length);
+    console.log('🎵 Starting enhanced preload of seller sounds:', sellers.length);
+    
+    // Clear outdated audio if seller URL changed
+    const existingSellerIds = Array.from(audioManager.current.preloadedAudio.keys());
+    for (const existingSellerId of existingSellerIds) {
+      const currentSeller = sellers.find(s => s.id === existingSellerId);
+      if (!currentSeller || !currentSeller.sound_file_url) {
+        console.log(`🗑️ Removing outdated/missing audio for seller ${existingSellerId}`);
+        audioManager.current.preloadedAudio.delete(existingSellerId);
+      }
+    }
     
     const preloadPromises = sellers
       .filter(seller => seller.sound_file_url)
       .map(async (seller) => {
         try {
-          if (audioManager.current.preloadedAudio.has(seller.id)) {
-            console.log(`🎵 Sound already preloaded for ${seller.name}`);
+          const existingAudio = audioManager.current.preloadedAudio.get(seller.id);
+          
+          // Check if we need to reload audio (different URL or no existing audio)
+          if (existingAudio && existingAudio.src.includes(seller.sound_file_url!)) {
+            console.log(`🎵 Sound already current for ${seller.name}`);
             return;
+          }
+
+          // Remove old audio if exists
+          if (existingAudio) {
+            console.log(`🔄 Updating audio for ${seller.name} (URL changed)`);
+            audioManager.current.preloadedAudio.delete(seller.id);
           }
 
           const audio = new Audio();
@@ -133,15 +152,15 @@ export const useAudioManager = () => {
           audio.preload = 'auto';
           audio.volume = 1.0;
           
-          // Create promise for load completion
+          // Enhanced promise for load completion with buffer support
           const loadPromise = new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => {
               reject(new Error('Timeout loading audio'));
-            }, 10000); // 10 second timeout
+            }, 15000); // Extended timeout for TV environments
 
             audio.oncanplaythrough = () => {
               clearTimeout(timeout);
-              console.log(`✅ Successfully preloaded sound for ${seller.name}`);
+              console.log(`✅ Successfully preloaded sound for ${seller.name} (Duration: ${audio.duration?.toFixed(2)}s)`);
               resolve();
             };
 
@@ -149,6 +168,11 @@ export const useAudioManager = () => {
               clearTimeout(timeout);
               console.error(`❌ Failed to preload sound for ${seller.name}:`, e);
               reject(e);
+            };
+
+            // Additional load event for better compatibility
+            audio.onloadeddata = () => {
+              console.log(`📁 Audio data loaded for ${seller.name}`);
             };
           });
 
@@ -163,10 +187,10 @@ export const useAudioManager = () => {
       });
 
     await Promise.allSettled(preloadPromises);
-    console.log(`🎵 Preloading complete. ${audioManager.current.preloadedAudio.size} sounds ready`);
+    console.log(`🎵 Enhanced preloading complete. ${audioManager.current.preloadedAudio.size} sounds ready`);
   }, []);
 
-  // Play seller sound with duration detection
+  // Enhanced play with precise duration detection and error recovery
   const playSellerSound = useCallback(async (sellerId?: string, sellerName?: string): Promise<{ played: boolean; duration?: number }> => {
     try {
       if (!sellerId) {
@@ -180,39 +204,97 @@ export const useAudioManager = () => {
       const preloadedAudio = audioManager.current.preloadedAudio.get(sellerId);
       
       if (preloadedAudio) {
-        // Clone the audio to allow multiple simultaneous plays
+        // Enhanced duration detection - wait for metadata if needed
+        let duration = preloadedAudio.duration;
+        
+        if (!duration || !isFinite(duration)) {
+          console.log('🔍 Duration not available, waiting for metadata...');
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('Metadata timeout')), 3000);
+              
+              const handleLoadedMetadata = () => {
+                clearTimeout(timeout);
+                preloadedAudio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                resolve();
+              };
+              
+              if (preloadedAudio.readyState >= 1) {
+                clearTimeout(timeout);
+                resolve();
+              } else {
+                preloadedAudio.addEventListener('loadedmetadata', handleLoadedMetadata);
+                preloadedAudio.load(); // Force reload metadata
+              }
+            });
+            
+            duration = preloadedAudio.duration;
+          } catch (metadataError) {
+            console.warn('⚠️ Could not load metadata, using default duration');
+          }
+        }
+        
+        // Convert to milliseconds with fallback
+        const durationMs = duration && isFinite(duration) 
+          ? duration * 1000 
+          : 3000; // Default 3 seconds
+        
+        console.log(`🎵 Playing enhanced sound for ${sellerName || 'Unknown seller'} (Duration: ${durationMs}ms, Ready state: ${preloadedAudio.readyState})`);
+        
+        // Create optimized audio clone with buffering
         const audioClone = new Audio();
         audioClone.src = preloadedAudio.src;
         audioClone.volume = 1.0;
         audioClone.crossOrigin = 'anonymous';
+        audioClone.preload = 'auto';
         
-        // Get duration (fallback to 3 seconds if not available)
-        const duration = preloadedAudio.duration && isFinite(preloadedAudio.duration) 
-          ? preloadedAudio.duration * 1000 // Convert to milliseconds
-          : 3000; // Default 3 seconds
-        
-        console.log(`🎵 Playing preloaded sound for ${sellerName || 'Unknown seller'} (Duration: ${duration}ms)`);
-        
-        // Add error handling for play promise
+        // Enhanced error handling with fallback recovery
         try {
           await audioClone.play();
           console.log(`✅ Successfully played sound for ${sellerName || 'Unknown seller'}`);
-          return { played: true, duration };
+          return { played: true, duration: durationMs };
         } catch (playError) {
           console.error(`❌ Audio play failed for ${sellerName || 'Unknown seller'}:`, playError);
           
-          // Try to handle common audio play errors
+          // Enhanced error recovery with retry mechanism
           if (playError instanceof DOMException && playError.name === 'NotAllowedError') {
-            console.log('🔧 Audio play blocked by browser policy, trying to reinitialize...');
+            console.log('🔧 Audio play blocked by browser policy, attempting recovery...');
             await ensureAudioContextReady();
-            // Don't retry here to avoid infinite loop
           }
           
-          return { played: false };
+          // Try fallback with original preloaded audio
+          try {
+            console.log('🔄 Attempting fallback playback...');
+            await preloadedAudio.play();
+            return { played: true, duration: durationMs };
+          } catch (fallbackError) {
+            console.error('❌ Fallback playback also failed:', fallbackError);
+            
+            // Final fallback: generate applause sound
+            try {
+              console.log('🔄 Using applause fallback...');
+              const { playApplauseSound } = await import('@/utils/sound');
+              playApplauseSound();
+              return { played: true, duration: 3000 }; // Default applause duration
+            } catch (applauseError) {
+              console.error('❌ Applause fallback failed:', applauseError);
+              return { played: false };
+            }
+          }
         }
       } else {
         console.log(`❌ No preloaded sound found for ${sellerName || 'Unknown seller'} (ID: ${sellerId})`);
-        return { played: false };
+        
+        // Fallback: try to play applause sound
+        try {
+          console.log('🔄 No seller sound found, using applause fallback...');
+          const { playApplauseSound } = await import('@/utils/sound');
+          playApplauseSound();
+          return { played: true, duration: 3000 }; // Default applause duration
+        } catch (fallbackError) {
+          console.error('❌ Fallback applause failed:', fallbackError);
+          return { played: false };
+        }
       }
     } catch (error) {
       console.error(`❌ Error playing sound for ${sellerName || 'Unknown seller'}:`, error);
@@ -276,11 +358,11 @@ export const useAudioManager = () => {
       }
     }, 2 * 60 * 1000); // More frequent checks every 2 minutes
 
-    // Very aggressive wake-up check for TV displays
+    // Enhanced keep-alive system for TV displays with multiple strategies
     const wakeUpInterval = setInterval(async () => {
-      console.log('⏰ Performing wake-up check for TV display...');
+      console.log('⏰ Performing enhanced wake-up check for TV display...');
       
-      // Force audio context to stay awake
+      // Strategy 1: Silent audio pulse to keep context active
       if (audioManager.current.audioContext && audioManager.current.audioContext.state === 'running') {
         try {
           // Create silent audio to keep context active
@@ -296,12 +378,33 @@ export const useAudioManager = () => {
           source.start();
           
           console.log('🎵 Silent audio pulse sent to keep context active');
+          
+          // Strategy 2: Test preloaded audio integrity
+          const preloadedCount = audioManager.current.preloadedAudio.size;
+          if (preloadedCount > 0) {
+            // Verify first audio file is still accessible
+            const firstAudio = Array.from(audioManager.current.preloadedAudio.values())[0];
+            if (firstAudio && (firstAudio.error || firstAudio.networkState === HTMLMediaElement.NETWORK_NO_SOURCE)) {
+              console.warn('⚠️ Detected corrupted audio during wake-up check');
+            }
+          }
+          
         } catch (error) {
           console.warn('⚠️ Silent audio pulse failed:', error);
           await ensureAudioContextReady();
         }
       }
-    }, 30 * 1000); // Every 30 seconds
+      
+      // Strategy 3: Prevent screen saver on TV displays
+      try {
+        // Create minimal DOM interaction to prevent sleep
+        const preventSleepEvent = new Event('mousemove', { bubbles: false });
+        document.dispatchEvent(preventSleepEvent);
+      } catch (preventSleepError) {
+        // Silent fail - not critical
+      }
+      
+    }, 45 * 1000); // Every 45 seconds - optimized for TV displays
 
     // Visibility change handler for immediate recovery
     const handleVisibilityChange = async () => {

@@ -27,96 +27,166 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
   useEffect(() => {
     if (!sale) return;
 
-    // Calculate celebration duration - sync with audio or use default
-    const celebrationDuration = audioDuration || 3000; // Use audio duration or default 3 seconds
-    console.log(`🎉 Starting celebration for ${sale.seller_name} - Duration: ${celebrationDuration}ms at ${new Date().toISOString()}`);
+    // Enhanced celebration duration sync with precise audio timing
+    const celebrationDuration = audioDuration || 3000;
+    const startTime = Date.now();
+    console.log(`🎉 Starting ENHANCED celebration for ${sale.seller_name} - Duration: ${celebrationDuration}ms at ${new Date().toISOString()}`);
 
-    // Force confetti initialization to prevent post-inactivity issues
+    // Enhanced confetti pre-initialization for 24/7 TV operation
     if (showConfetti) {
       try {
-        // Pre-initialize confetti canvas to prevent rendering issues after long inactivity
+        // Multiple initialization strategies for maximum reliability
         confetti({ particleCount: 1, startVelocity: 0, spread: 0, origin: { x: -1, y: -1 } });
-        console.log('✅ Confetti pre-initialized successfully');
+        
+        // Force canvas creation and GPU acceleration
+        const canvas = document.querySelector('canvas[data-confetti-id]') as HTMLCanvasElement;
+        if (canvas) {
+          const context = canvas.getContext('2d');
+          if (context) {
+            context.save();
+            context.restore();
+          }
+        }
+        
+        console.log('✅ Enhanced confetti pre-initialized successfully');
       } catch (error) {
-        console.warn('⚠️ Confetti pre-initialization failed:', error);
+        console.warn('⚠️ Enhanced confetti pre-initialization failed:', error);
       }
     }
 
-    // Start animation with forced reflow to prevent rendering issues
-    requestAnimationFrame(() => {
+    // Enhanced animation start with triple redundancy
+    const startAnimation = () => {
       setIsVisible(true);
-      console.log('✅ Celebration visibility set to true');
-    });
+      console.log(`✅ Enhanced celebration visibility set to true (${Date.now() - startTime}ms after start)`);
+    };
+    
+    // Triple redundancy for animation start
+    requestAnimationFrame(startAnimation);
+    setTimeout(startAnimation, 16); // Fallback after 1 frame
+    setTimeout(startAnimation, 50); // Second fallback
 
     let confettiInterval: NodeJS.Timeout | null = null;
+    let confettiTimeouts: NodeJS.Timeout[] = [];
 
-    // Trigger confetti if enabled - sync with audio duration
+    // Enhanced confetti system with precise timing and error recovery
     if (showConfetti) {
-      const animationEnd = Date.now() + celebrationDuration;
+      const animationEnd = startTime + celebrationDuration;
       const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
 
       const randomInRange = (min: number, max: number) => {
         return Math.random() * (max - min) + min;
       };
 
-      // Start confetti with immediate first burst
-      try {
-        confetti({
-          ...defaults,
-          particleCount: 100,
-          origin: { x: 0.5, y: 0.5 }
-        });
-        console.log('✅ Initial confetti burst triggered');
-      } catch (error) {
-        console.warn('⚠️ Initial confetti burst failed:', error);
-      }
+      // Enhanced initial confetti burst with retry mechanism
+      const triggerInitialBurst = () => {
+        try {
+          confetti({
+            ...defaults,
+            particleCount: 150, // More particles for better TV visibility
+            origin: { x: 0.5, y: 0.5 }
+          });
+          console.log('✅ Enhanced initial confetti burst triggered');
+        } catch (error) {
+          console.warn('⚠️ Enhanced initial confetti burst failed:', error);
+          // Retry once after short delay
+          const retryTimeout = setTimeout(() => {
+            try {
+              confetti({
+                ...defaults,
+                particleCount: 100,
+                origin: { x: 0.5, y: 0.5 }
+              });
+              console.log('✅ Retry confetti burst successful');
+            } catch (retryError) {
+              console.warn('⚠️ Retry confetti burst also failed:', retryError);
+            }
+          }, 100);
+          confettiTimeouts.push(retryTimeout);
+        }
+      };
 
+      triggerInitialBurst();
+
+      // Enhanced continuous confetti with precise timing
       confettiInterval = setInterval(() => {
-        const timeLeft = animationEnd - Date.now();
+        const now = Date.now();
+        const timeLeft = animationEnd - now;
+        const progress = 1 - (timeLeft / celebrationDuration);
 
         if (timeLeft <= 0) {
           if (confettiInterval) clearInterval(confettiInterval);
           return;
         }
 
-        const particleCount = Math.max(20, 50 * (timeLeft / celebrationDuration));
+        // Dynamic particle count based on time remaining and TV visibility
+        const baseParticleCount = Math.max(30, 60 * (timeLeft / celebrationDuration));
+        const particleCount = Math.floor(baseParticleCount);
 
         try {
+          // Dual confetti bursts for better TV coverage
           confetti({
             ...defaults,
-            particleCount: Math.floor(particleCount),
+            particleCount,
             origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
           });
           confetti({
             ...defaults,
-            particleCount: Math.floor(particleCount),
+            particleCount,
             origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
           });
+          
+          // Extra center burst at 50% completion for emphasis
+          if (progress >= 0.45 && progress <= 0.55) {
+            confetti({
+              ...defaults,
+              particleCount: Math.floor(particleCount * 0.5),
+              origin: { x: 0.5, y: 0.3 }
+            });
+          }
+          
         } catch (error) {
-          console.warn('⚠️ Confetti rendering failed:', error);
+          console.warn('⚠️ Enhanced confetti rendering failed:', error);
           if (confettiInterval) clearInterval(confettiInterval);
         }
-      }, 250);
+      }, 200); // Slightly faster for better TV effect
     }
 
-    // Hide celebration when audio finishes - sync with audio duration
+    // Enhanced celebration end with precise timing
+    const celebrationEndTime = startTime + celebrationDuration;
+    const timeToEnd = celebrationEndTime - Date.now();
+    
     const timer = setTimeout(() => {
-      console.log(`🎉 Celebration ending for ${sale.seller_name} at ${new Date().toISOString()}`);
+      const actualDuration = Date.now() - startTime;
+      console.log(`🎉 Enhanced celebration ending for ${sale.seller_name} (actual duration: ${actualDuration}ms, target: ${celebrationDuration}ms)`);
       
+      // Clean up confetti immediately
       if (confettiInterval) {
         clearInterval(confettiInterval);
+        confettiInterval = null;
       }
       
+      // Clear any pending timeouts
+      confettiTimeouts.forEach(timeout => clearTimeout(timeout));
+      confettiTimeouts = [];
+      
       setIsVisible(false);
-      setTimeout(() => {
-        console.log(`🎉 Celebration complete for ${sale.seller_name}`);
+      
+      // Enhanced completion with precise timing
+      const fadeOutTimer = setTimeout(() => {
+        const totalDuration = Date.now() - startTime;
+        console.log(`🎉 Enhanced celebration complete for ${sale.seller_name} (total: ${totalDuration}ms)`);
         onComplete();
-      }, 300); // Wait for fade out
-    }, celebrationDuration);
+      }, 300);
+      
+      confettiTimeouts.push(fadeOutTimer);
+    }, Math.max(0, timeToEnd));
 
     return () => {
       if (timer) clearTimeout(timer);
       if (confettiInterval) clearInterval(confettiInterval);
+      confettiTimeouts.forEach(timeout => clearTimeout(timeout));
+      
+      console.log(`🧹 Enhanced celebration cleanup for ${sale.seller_name}`);
     };
   }, [sale, showConfetti, onComplete, audioDuration]);
 

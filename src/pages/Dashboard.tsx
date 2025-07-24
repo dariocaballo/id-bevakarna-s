@@ -56,10 +56,12 @@ const Dashboard = () => {
     setCelebrationSale(sale);
   }, [playSellerSound, ensureAudioContextReady]);
 
-  // Handle seller updates for audio reloading in 24/7 operation
+  // Enhanced seller updates with live audio reloading for 24/7 operation
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
+    console.log('🔄 Enhanced seller update - reloading audio files for TV operation...');
     await ensureAudioContextReady(); // Ensure audio is ready before reloading
-    await preloadSellerSounds(updatedSellers);
+    await preloadSellerSounds(updatedSellers); // Will automatically handle URL changes
+    console.log('✅ Enhanced seller audio update complete');
   }, [preloadSellerSounds, ensureAudioContextReady]);
 
   const performSystemHealthCheck = () => {
@@ -149,8 +151,10 @@ const Dashboard = () => {
     };
   }, [ensureAudioContextReady, performSystemHealthCheck]);
 
-  // TV-specific display optimization
+  // Enhanced TV-specific display optimization with full 24/7 support
   useEffect(() => {
+    console.log('🖥️ Setting up enhanced TV display optimizations...');
+    
     // Prevent context menu on TV (right-click)
     const preventContextMenu = (e: MouseEvent) => e.preventDefault();
     document.addEventListener('contextmenu', preventContextMenu);
@@ -159,15 +163,96 @@ const Dashboard = () => {
     const preventDrag = (e: DragEvent) => e.preventDefault();
     document.addEventListener('dragstart', preventDrag);
     
-    // Optimize for TV display
-    document.body.style.userSelect = 'none'; // Prevent text selection
+    // Prevent text selection on TV
+    const preventSelection = (e: Event) => e.preventDefault();
+    document.addEventListener('selectstart', preventSelection);
+    
+    // Enhanced TV display optimizations
+    document.body.style.userSelect = 'none';
     document.body.style.webkitUserSelect = 'none';
+    (document.body.style as any).webkitTouchCallout = 'none';
+    (document.body.style as any).webkitTapHighlightColor = 'transparent';
+    
+    // Prevent screen saver and sleep mode
+    let wakeLockSentinel: any = null;
+    
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+          console.log('🔓 Screen wake lock acquired for TV display');
+        }
+      } catch (error) {
+        console.log('⚠️ Could not acquire screen wake lock:', error);
+      }
+    };
+    
+    // Request wake lock immediately
+    requestWakeLock();
+    
+    // Re-acquire wake lock on visibility change
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && wakeLockSentinel?.released) {
+        requestWakeLock();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Enhanced Chrome TV optimizations
+    const style = document.createElement('style');
+    style.textContent = `
+      * {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      /* Prevent blue highlight on focus for TV */
+      *:focus {
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      
+      /* Optimize for 1080p TV displays */
+      html {
+        text-rendering: optimizeLegibility;
+        -webkit-font-feature-settings: "liga", "kern";
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Prevent zoom on TV displays
+    const preventZoom = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchstart', preventZoom, { passive: false });
     
     return () => {
       document.removeEventListener('contextmenu', preventContextMenu);
       document.removeEventListener('dragstart', preventDrag);
+      document.removeEventListener('selectstart', preventSelection);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('touchstart', preventZoom);
+      
+      // Release wake lock
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release();
+      }
+      
+      // Restore default styles
       document.body.style.userSelect = '';
       document.body.style.webkitUserSelect = '';
+      (document.body.style as any).webkitTouchCallout = '';
+      (document.body.style as any).webkitTapHighlightColor = '';
+      
+      // Remove style element
+      if (style.parentNode) {
+        style.parentNode.removeChild(style);
+      }
+      
+      console.log('🧹 TV display optimizations cleaned up');
     };
   }, []);
 
