@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from '@/hooks/useAuth';
-import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus, LogOut } from 'lucide-react';
 
+import { Settings, Users, Target, Calendar, BarChart, Upload, Download, Trash2, Edit, Crown, Volume2, Palette, Move, Eye, EyeOff, Plus, LogOut } from 'lucide-react';
 
 interface Seller {
   id: string;
@@ -44,7 +42,8 @@ interface DashboardSetting {
 
 const Admin = () => {
   const { toast } = useToast();
-  const { user, isAdmin, loading: authLoading, signOut } = useAuth();
+  const [password, setPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [challenges, setChallenges] = useState<DailyChallenge[]>([]);
   const [settings, setSettings] = useState<{ [key: string]: any }>({});
@@ -53,39 +52,29 @@ const Admin = () => {
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<DailyChallenge | null>(null);
 
-  // Redirect if not authenticated or not admin
-  if (!authLoading && (!user || !isAdmin)) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  const handleSignOut = async () => {
-    await signOut();
-    toast({
-      title: "Utloggad",
-      description: "Du har loggats ut från adminpanelen."
-    });
-  };
-
-  // Load data with improved error handling and performance
-  useEffect(() => {
-    if (user && isAdmin) {
-      console.log('📊 Loading admin data...');
-      Promise.all([
-        loadSellers(),
-        loadChallenges(),
-        loadSettings()
-      ]).then(() => {
-        console.log('✅ Admin data loaded successfully');
-      }).catch((error) => {
-        console.error('❌ Error loading admin data:', error);
-        toast({
-          title: "Varning",
-          description: "Vissa data kunde inte laddas. Prova att uppdatera sidan.",
-          variant: "destructive"
-        });
+  const handleLogin = () => {
+    if (password === 'admin123') {
+      setIsAuthenticated(true);
+      toast({
+        title: "Framgång",
+        description: "Inloggad som administratör"
+      });
+    } else {
+      toast({
+        title: "Fel",
+        description: "Fel lösenord",
+        variant: "destructive"
       });
     }
-  }, [user, isAdmin]);
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadSellers();
+      loadChallenges();
+      loadSettings();
+    }
+  }, [isAuthenticated]);
 
   const loadSellers = async () => {
     try {
@@ -133,7 +122,6 @@ const Admin = () => {
       toast({ title: "Fel", description: "Kunde inte ladda inställningar", variant: "destructive" });
     }
   };
-
 
   // Seller management
   const handleAddSeller = async () => {
@@ -397,14 +385,28 @@ const Admin = () => {
     window.URL.revokeObjectURL(url);
   };
 
-
-  if (authLoading) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Admin Inloggning</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="password">Lösenord</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                placeholder="Ange admin lösenord"
+              />
+            </div>
+            <Button onClick={handleLogin} className="w-full">Logga in</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -421,9 +423,8 @@ const Admin = () => {
               className="h-12 w-auto mx-auto"
             />
             <div className="flex-1 flex justify-end">
-              <Button onClick={handleSignOut} variant="outline" className="flex items-center gap-2">
-                <LogOut className="h-4 w-4" />
-                Sign Out
+              <Button onClick={() => setIsAuthenticated(false)} variant="outline">
+                Logga ut
               </Button>
             </div>
           </div>
@@ -585,7 +586,6 @@ const Admin = () => {
               </CardContent>
             </Card>
           </TabsContent>
-
 
           <TabsContent value="goals" className="space-y-6">
             <Card>
