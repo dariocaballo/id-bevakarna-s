@@ -321,6 +321,13 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
           
           if (payload.eventType === 'INSERT' && isMountedRef.current) {
             const newSale = payload.new as Sale;
+            console.log('🎆 NEW SALE REALTIME UPDATE:', {
+              seller: newSale.seller_name,
+              amount: newSale.amount,
+              timestamp: newSale.timestamp,
+              id: newSale.id
+            });
+            
             setLastSale(newSale);
             
             // Find seller and trigger callback
@@ -329,10 +336,18 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
               s.name.toLowerCase() === newSale.seller_name.toLowerCase()
             );
             
-            console.log('🎵 New sale - Seller found:', !!seller, 'Seller name:', newSale.seller_name);
+            console.log('🔍 Seller lookup result:', {
+              found: !!seller,
+              searchedId: newSale.seller_id,
+              searchedName: newSale.seller_name,
+              availableSellers: sellersCache.current.map(s => ({ id: s.id, name: s.name }))
+            });
             
             if (onNewSale) {
+              console.log('🎆 CALLING onNewSale callback - DASHBOARD SHOULD CELEBRATE NOW!');
               onNewSale(newSale, seller);
+            } else {
+              console.error('❌ NO onNewSale callback provided - CELEBRATIONS WILL NOT WORK!');
             }
           }
           

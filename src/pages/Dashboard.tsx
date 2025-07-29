@@ -33,26 +33,40 @@ const Dashboard = () => {
   
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
+    console.log('🎆🎆🎆 DASHBOARD CELEBRATION TRIGGERED! 🎆🎆🎆');
+    console.log('📊 Sale details:', {
+      id: sale.id,
+      seller_name: sale.seller_name,
+      seller_id: sale.seller_id,
+      amount: sale.amount,
+      timestamp: sale.timestamp
+    });
+    console.log('👤 Seller details:', seller);
+    
     // Ensure audio is ready for 24/7 operation
     await ensureAudioContextReady();
     
     // Play seller sound and get duration for celebration sync
     try {
+      console.log('🎵 Attempting to play seller sound...');
       const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
       
       if (audioResult.played) {
         // Set celebration duration to match audio duration
+        console.log('🎵 Audio played successfully, duration:', audioResult.duration);
         setCelebrationAudioDuration(audioResult.duration);
       } else {
         // Use default duration if no audio
+        console.log('🎵 No custom audio, using default duration');
         setCelebrationAudioDuration(3000);
       }
     } catch (error) {
-      console.error('Error playing sound:', error);
+      console.error('❌ Error playing sound:', error);
       setCelebrationAudioDuration(3000); // Default duration on error
     }
     
     // Trigger celebration overlay
+    console.log('🎆 Setting celebration sale - overlay should appear now!');
     setCelebrationSale(sale);
   }, [playSellerSound, ensureAudioContextReady]);
 

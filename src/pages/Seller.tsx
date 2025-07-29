@@ -228,14 +228,8 @@ const Seller = () => {
 
       if (error) throw error;
 
-      // Play seller sound using optimized audio manager
-      console.log('🎵 Attempting to play sound for sale...');
-      const soundPlayed = await playSellerSound(selectedSellerId, selectedSeller?.name);
-      
-      if (!soundPlayed) {
-        console.log('🎵 No custom sound played, using fallback applause');
-        playApplauseSound();
-      }
+      // NO AUDIO on seller page - only dashboard plays sounds and celebrates
+      console.log('✅ Sale saved to database - dashboard will handle celebration via realtime');
 
       toast({
         title: "Försäljning rapporterad! 🎉",
