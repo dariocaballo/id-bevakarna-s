@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
-import { playApplauseSound } from '@/utils/sound';
+import { Badge } from '@/components/ui/badge';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAudioManager } from '@/hooks/useAudioManager';
 import { useImageCache } from '@/hooks/useImageCache';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
+import { Trophy, Medal, Crown } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Sale {
   id: string;
@@ -13,6 +14,7 @@ interface Sale {
   seller_id?: string;
   amount: number;
   timestamp: string;
+  service_type?: string;
 }
 
 interface Seller {
@@ -24,12 +26,10 @@ interface Seller {
 }
 
 const Dashboard = () => {
-  const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady, isInitialized } = useAudioManager();
+  const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
-  
-  // System stability monitoring removed for debugging
   
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
@@ -39,7 +39,8 @@ const Dashboard = () => {
       seller_name: sale.seller_name,
       seller_id: sale.seller_id,
       amount: sale.amount,
-      timestamp: sale.timestamp
+      timestamp: sale.timestamp,
+      service_type: sale.service_type
     });
     console.log('👤 Seller details:', seller);
     
@@ -78,10 +79,6 @@ const Dashboard = () => {
     console.log('✅ Enhanced seller audio update complete');
   }, [preloadSellerSounds, ensureAudioContextReady]);
 
-  const performSystemHealthCheck = () => {
-    // Basic health check - logs removed for performance
-  };
-
   // Use enhanced realtime data hook with TV-optimized settings - ONLY on dashboard
   const {
     totalToday,
@@ -99,6 +96,60 @@ const Dashboard = () => {
     enableAutoRefresh: true,
     refreshInterval: 10000 // More frequent updates for TV display (10 seconds)
   });
+
+  // State for El Clásico competition data
+  const [idSales, setIdSales] = useState<Sale[]>([]);
+  
+  // Load El Clásico data
+  useEffect(() => {
+    const fetchIdSales = async () => {
+      try {
+        const now = new Date();
+        const august1 = new Date(2025, 7, 1); // August 1, 2025
+        const september30 = new Date(2025, 8, 30, 23, 59, 59); // September 30, 2025
+        
+        // Only fetch if we're in the competition period
+        if (now < august1 || now > september30) {
+          setIdSales([]);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('sales')
+          .select('*')
+          .eq('service_type', 'id-bevakarna')
+          .gte('timestamp', august1.toISOString())
+          .lte('timestamp', september30.toISOString());
+        
+        if (error) throw error;
+        setIdSales(data || []);
+      } catch (error) {
+        console.error('Error loading El Clásico data:', error);
+      }
+    };
+    
+    fetchIdSales();
+  }, []);
+
+  // Calculate El Clásico competition data (ID-skydd count per seller)
+  const elClasicoData = useMemo(() => {
+    // Calculate ID-skydd count per seller (assuming each sale = 1 ID-skydd)
+    const sellerIdCounts: { [key: string]: number } = {};
+    idSales.forEach(sale => {
+      sellerIdCounts[sale.seller_name] = (sellerIdCounts[sale.seller_name] || 0) + 1;
+    });
+
+    // Create array with seller data
+    return sellers.map(seller => {
+      const idCount = sellerIdCounts[seller.name] || 0;
+      return {
+        name: seller.name,
+        idCount,
+        imageUrl: seller.profile_image_url,
+        status: idCount >= 86 ? 'green' : idCount >= 65 ? 'yellow' : 'blue'
+      };
+    }).sort((a, b) => b.idCount - a.idCount);
+  }, [sellers, idSales]);
 
   // Enhanced initialization for 24/7 TV operation
   useEffect(() => {
@@ -143,138 +194,11 @@ const Dashboard = () => {
     };
   }, [sellers, initializeAudio, ensureAudioContextReady, preloadSellerSounds, preloadImages]);
 
-  // Simplified monitoring for reliable 24/7 operation
-  useEffect(() => {
-    // Basic audio health check - simplified for reliability
-    const audioHealthCheck = setInterval(async () => {
-      try {
-        await ensureAudioContextReady();
-      } catch (error) {
-        console.warn('Audio context issue:', error);
-      }
-    }, 2 * 60 * 1000); // Check every 2 minutes
-
-    // Basic system health monitoring
-    const systemHealthCheck = setInterval(() => {
-      performSystemHealthCheck();
-    }, 5 * 60 * 1000); // Check every 5 minutes
-
-    return () => {
-      clearInterval(audioHealthCheck);
-      clearInterval(systemHealthCheck);
-    };
-  }, [ensureAudioContextReady, performSystemHealthCheck]);
-
-  // Enhanced TV-specific display optimization with full 24/7 support
-  useEffect(() => {
-    console.log('🖥️ Setting up enhanced TV display optimizations...');
-    
-    // Prevent context menu on TV (right-click)
-    const preventContextMenu = (e: MouseEvent) => e.preventDefault();
-    document.addEventListener('contextmenu', preventContextMenu);
-    
-    // Prevent drag operations on TV
-    const preventDrag = (e: DragEvent) => e.preventDefault();
-    document.addEventListener('dragstart', preventDrag);
-    
-    // Prevent text selection on TV
-    const preventSelection = (e: Event) => e.preventDefault();
-    document.addEventListener('selectstart', preventSelection);
-    
-    // Enhanced TV display optimizations
-    document.body.style.userSelect = 'none';
-    document.body.style.webkitUserSelect = 'none';
-    (document.body.style as any).webkitTouchCallout = 'none';
-    (document.body.style as any).webkitTapHighlightColor = 'transparent';
-    
-    // Prevent screen saver and sleep mode
-    let wakeLockSentinel: any = null;
-    
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
-          console.log('🔓 Screen wake lock acquired for TV display');
-        }
-      } catch (error) {
-        console.log('⚠️ Could not acquire screen wake lock:', error);
-      }
-    };
-    
-    // Request wake lock immediately
-    requestWakeLock();
-    
-    // Re-acquire wake lock on visibility change
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && wakeLockSentinel?.released) {
-        requestWakeLock();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Enhanced Chrome TV optimizations
-    const style = document.createElement('style');
-    style.textContent = `
-      * {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-      
-      /* Prevent blue highlight on focus for TV */
-      *:focus {
-        outline: none !important;
-        -webkit-tap-highlight-color: transparent !important;
-      }
-      
-      /* Optimize for 1080p TV displays */
-      html {
-        text-rendering: optimizeLegibility;
-        -webkit-font-feature-settings: "liga", "kern";
-      }
-    `;
-    document.head.appendChild(style);
-    
-    // Prevent zoom on TV displays
-    const preventZoom = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
-        e.preventDefault();
-      }
-    };
-    document.addEventListener('touchstart', preventZoom, { passive: false });
-    
-    return () => {
-      document.removeEventListener('contextmenu', preventContextMenu);
-      document.removeEventListener('dragstart', preventDrag);
-      document.removeEventListener('selectstart', preventSelection);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('touchstart', preventZoom);
-      
-      // Release wake lock
-      if (wakeLockSentinel) {
-        wakeLockSentinel.release();
-      }
-      
-      // Restore default styles
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
-      (document.body.style as any).webkitTouchCallout = '';
-      (document.body.style as any).webkitTapHighlightColor = '';
-      
-      // Remove style element
-      if (style.parentNode) {
-        style.parentNode.removeChild(style);
-      }
-      
-      console.log('🧹 TV display optimizations cleaned up');
-    };
-  }, []);
-
   // Optimized image rendering with cache and fallback
-  const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-20 h-20") => {
+  const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-8 h-8") => {
     if (!seller.imageUrl) {
       return (
-        <span className="text-lg font-bold text-slate-800">
+        <span className="text-sm font-bold text-slate-800">
           {seller.name.charAt(0).toUpperCase()}
         </span>
       );
@@ -286,7 +210,7 @@ const Dashboard = () => {
       <img 
         src={cachedImageUrl || seller.imageUrl}
         alt={seller.name}
-        className={`${size} object-cover`}
+        className={`${size} object-cover rounded-full`}
         onError={(e) => {
           // Hide broken image and show fallback
           e.currentTarget.style.display = 'none';
@@ -317,253 +241,162 @@ const Dashboard = () => {
     }
   };
 
-  // Check if night mode is active
-  const isNightTime = () => {
-    const now = new Date();
-    const hour = now.getHours();
-    return settings.night_mode_enabled === 'true' && (hour >= 18 || hour <= 9);
-  };
-
   // Get seller info for celebration
   const getSeller = (sale: Sale) => {
     return sellers.find(s => s.id === sale.seller_id);
   };
 
   return (
-    <div className={`h-screen overflow-hidden p-3 ${
-      isNightTime() 
-        ? 'bg-gradient-to-br from-slate-800 to-slate-900' 
-        : 'bg-gradient-to-br from-blue-50 to-blue-100'
-    }`}>
+    <div className="h-screen overflow-hidden p-3 bg-gradient-to-br from-blue-50 to-blue-100">
       <div className="max-w-7xl mx-auto h-full flex flex-col">
-        {/* Header - Kompakt */}
+        {/* Header - Kompakt enligt spec */}
         <div className="text-center mb-3 flex-shrink-0">
-          <h1 className={`text-3xl font-bold mb-1 ${
-            isNightTime() ? 'text-white' : 'text-blue-800'
-          }`}>ID-Bevakarna</h1>
-          <h2 className={`text-lg font-semibold ${
-            isNightTime() ? 'text-slate-300' : 'text-blue-600'
-          }`}>Sales Dashboard</h2>
+          <h1 className="text-3xl font-bold mb-1 text-blue-800">ID-Bevakarna</h1>
+          <h2 className="text-lg font-semibold text-blue-600">Sales Dashboard</h2>
         </div>
 
-      {/* Celebration Overlay */}
-      <CelebrationOverlay
-        sale={celebrationSale}
-        sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
-        onComplete={() => {
-          setCelebrationSale(null);
-          setCelebrationAudioDuration(undefined);
-        }}
-        showBubble={settings.show_bubble !== false}
-        showConfetti={settings.show_confetti !== false}
-        audioDuration={celebrationAudioDuration}
-      />
+        {/* Celebration Overlay */}
+        <CelebrationOverlay
+          sale={celebrationSale}
+          sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
+          onComplete={() => {
+            setCelebrationSale(null);
+            setCelebrationAudioDuration(undefined);
+          }}
+          showBubble={settings.show_bubble !== false}
+          showConfetti={settings.show_confetti !== false}
+          audioDuration={celebrationAudioDuration}
+        />
 
-        {/* TV-Optimerad Layout - Flex Container */}
-        <div className="flex-1 flex flex-col gap-2 overflow-hidden">
+        {/* Layout enligt specifikation */}
+        <div className="flex-1 flex flex-col gap-3 overflow-hidden">
           
-          {/* Övre rad - Totaler + King/Queen (om aktiverad) */}
-          <div className="flex gap-2 h-32">
-            {/* Dagens Total */}
+          {/* Totalt TB (dag + månad) */}
+          <div className="flex gap-3 h-24">
             <Card className="flex-1 shadow-md border-0 bg-white">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-base text-slate-700 font-bold">DAGENS TOTALA TB</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="p-4">
+                <h3 className="text-sm font-bold text-slate-700 mb-1">DAGENS TB</h3>
                 <div className="text-2xl font-bold text-blue-700">{formatCurrency(totalToday)}</div>
-                <p className="text-xs text-slate-500">Totalt idag</p>
               </CardContent>
             </Card>
-
-            {/* Månadens Total */}
             <Card className="flex-1 shadow-md border-0 bg-white">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-base text-slate-700 font-bold">MÅNADENS TOTALA TB</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="p-4">
+                <h3 className="text-sm font-bold text-slate-700 mb-1">MÅNADENS TB</h3>
                 <div className="text-2xl font-bold text-blue-700">{formatCurrency(totalMonth)}</div>
-                <p className="text-xs text-slate-500">Totalt denna månad</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 🔵 Dagens försäljning per säljare (cirklar) */}
+          <Card className="shadow-md border-0 bg-white flex-shrink-0" style={{height: '180px'}}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                🔵 Dagens försäljning per säljare
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-hidden">
+              <div className="flex justify-center gap-6 flex-wrap">
+                {todaysSellers.slice(0, 6).map((seller, index) => (
+                  <div key={seller.name} className="flex flex-col items-center space-y-1">
+                    {/* Stor cirkel med profilbild */}
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-blue-300 shadow-lg">
+                        {seller.imageUrl ? (
+                          <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-lg font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      {/* Medalj */}
+                      <div className="absolute -top-1 -right-1 text-lg">
+                        {getMedalIcon(index)}
+                      </div>
+                    </div>
+                    {/* Namn + Dagens TB */}
+                    <div className="text-center">
+                      <p className="font-bold text-slate-800 text-xs leading-tight">{seller.name}</p>
+                      <p className="text-sm font-bold text-blue-700 leading-tight">{formatCurrency(seller.amount)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Nedre rad: Månadens toppsäljare & El Clásico */}
+          <div className="flex gap-3 flex-1 min-h-0">
+            {/* 🥇 Månadens toppsäljare */}
+            <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                  🥇 Månadens toppsäljare
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-y-auto">
+                <div className="space-y-2">
+                  {topSellers.slice(0, 4).map((seller, index) => (
+                    <div key={seller.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-600">{index + 1}.</span>
+                        <span className="font-semibold text-slate-800 text-sm">{seller.name}</span>
+                      </div>
+                      <span className="font-bold text-blue-700 text-sm">{formatCurrency(seller.amount)}</span>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
-            {/* Dagens Kung/Drottning - Kompakt */}
-            {settings.king_queen_enabled === 'true' && todaysSellers.length > 0 && (
-              <Card className="flex-1 shadow-md border-0 bg-gradient-to-r from-yellow-50 to-yellow-100 border-2 border-yellow-300">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-sm text-slate-700 font-bold flex items-center justify-center gap-1">
-                    <span className="text-lg">👑</span> Dagens Kung/Drottning
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center overflow-hidden border-2 border-yellow-400">
-                      {renderSellerImage(todaysSellers[0], "w-full h-full")}
-                      {/* Fallback element */}
-                      <span className="text-lg font-bold text-slate-800" style={{display: 'none'}}>
-                        {todaysSellers[0].name.charAt(0).toUpperCase()}
+            {/* 🏆 El Clásico */}
+            <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                  🏆 El Clásico
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-y-auto">
+                <div className="space-y-2">
+                  {elClasicoData.slice(0, 4).map((seller) => (
+                    <div key={seller.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800 text-sm">{seller.name}</span>
+                        {seller.status === 'green' && <Trophy className="w-4 h-4 text-yellow-500" />}
+                      </div>
+                      <span className={`font-bold text-sm ${
+                        seller.status === 'green' ? 'text-green-600' : 
+                        seller.status === 'yellow' ? 'text-yellow-600' : 
+                        'text-blue-600'
+                      }`}>
+                        {seller.idCount} / 86
                       </span>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{todaysSellers[0].name}</p>
-                      <p className="text-xs font-bold text-yellow-600">{formatCurrency(todaysSellers[0].amount)}</p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 🧩 Utmaning / Kung / Mål (om aktivt) */}
+          {activeChallenges.length > 0 && (
+            <Card className="shadow-md border-0 bg-white flex-shrink-0" style={{height: '100px'}}>
+              <CardHeader className="pb-1">
+                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                  🧩 Utmaning / Kung / Mål
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  {activeChallenges.slice(0, 2).map((challenge) => (
+                    <div key={challenge.id} className="flex-1 p-2 rounded bg-yellow-50 border border-yellow-200">
+                      <h4 className="text-sm font-bold text-slate-800">{challenge.title}</h4>
+                      <p className="text-xs text-slate-600 mt-1">{challenge.description}</p>
+                      <p className="text-sm font-bold text-blue-700 mt-1">Mål: {formatCurrency(challenge.target_amount)}</p>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Huvud-innehåll - Grid som anpassar sig */}
-          <div className={`flex-1 grid gap-2 ${
-            // Dynamisk grid baserat på aktiva moduler
-            activeChallenges.length > 0 && settings.challenges_enabled === 'true' 
-              ? 'grid-cols-3' 
-              : settings.goals_enabled === 'true' && sellers.filter(s => s.monthly_goal > 0).length > 0
-                ? 'grid-cols-2'
-                : 'grid-cols-1'
-          }`}>
-            
-            {/* Dagens försäljning - Horisontell rangordning */}
-            {todaysSellers.length > 0 && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Dagens försäljning per säljare</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="flex flex-wrap justify-center gap-4 px-2">
-                    {todaysSellers.map((seller, index) => (
-                      <div key={seller.name} className="flex flex-col items-center space-y-2 min-w-[120px]">
-                        {/* Platsering ovanför cirkel */}
-                        <div className="flex items-center justify-center">
-                          <span className="text-lg font-bold">{getMedalIcon(index)}</span>
-                          <span className="text-sm font-bold text-slate-600 ml-1">#{index + 1}</span>
-                        </div>
-                        
-                         {/* Stor cirkel med profilbild */}
-                         <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-3 border-blue-300 shadow-lg hover:scale-105 transition-transform duration-200">
-                           {seller.imageUrl ? (
-                             <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
-                           ) : (
-                             <span className="text-2xl font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
-                           )}
-                         </div>
-                        
-                        {/* Namn och belopp under cirkel */}
-                        <div className="text-center">
-                          <p className="font-bold text-slate-800 text-sm leading-tight">{seller.name}</p>
-                          <p className="text-base font-bold text-blue-700 leading-tight">{formatCurrency(seller.amount)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Mitten kolumn - Säljmål (om aktiverat) */}
-            {settings.goals_enabled === 'true' && sellers.filter(s => s.monthly_goal > 0).length > 0 && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Månadens säljmål</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="space-y-2">
-                    {sellers.filter(seller => seller.monthly_goal > 0).map((seller) => {
-                      const sellerMonthSales = topSellers.find(s => s.name === seller.name)?.amount || 0;
-                      const progress = Math.min((sellerMonthSales / seller.monthly_goal) * 100, 100);
-                      
-                      return (
-                        <div key={seller.id} className="p-2 rounded bg-blue-50">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              {seller.profile_image_url ? (
-                                <img src={seller.profile_image_url} alt={seller.name} className="w-6 h-6 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-blue-200 flex items-center justify-center">
-                                  <span className="text-xs font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
-                                </div>
-                              )}
-                              <span className="font-semibold text-slate-800 text-xs">{seller.name}</span>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs text-slate-600">{formatCurrency(sellerMonthSales)} / {formatCurrency(seller.monthly_goal)}</div>
-                              <div className="text-xs text-slate-500">{progress.toFixed(1)}%</div>
-                            </div>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all duration-500 ease-out ${
-                                progress >= 100 ? 'bg-green-500' : progress >= 75 ? 'bg-blue-500' : progress >= 50 ? 'bg-yellow-500' : 'bg-red-400'
-                              }`}
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Höger kolumn - Utmaningar (om aktiverat) */}
-            {activeChallenges.length > 0 && settings.challenges_enabled === 'true' && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Dagliga utmaningar</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="space-y-2">
-                    {activeChallenges.map((challenge) => (
-                      <div key={challenge.id} className="p-2 rounded bg-yellow-50 border border-yellow-200">
-                        <h4 className="text-sm font-bold text-slate-800 mb-1">{challenge.title}</h4>
-                        <p className="text-xs text-slate-600 mb-2">{challenge.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500">Mål:</span>
-                          <span className="text-sm font-bold text-blue-700">{formatCurrency(challenge.target_amount)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Månadens toppsäljare - Kompakt version */}
-            {topSellers.length > 0 && (
-              <Card className="shadow-md border-0 bg-white overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base text-slate-700 font-bold text-center">Månadens toppsäljare</CardTitle>
-                </CardHeader>
-                <CardContent className="overflow-y-auto max-h-[calc(100%-60px)]">
-                  <div className="space-y-2">
-                    {topSellers.slice(0, 5).map((seller, index) => (
-                      <div key={seller.name} className="flex items-center justify-between p-2 rounded bg-blue-50">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{getMedalIcon(index)}</span>
-                          <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center overflow-hidden border border-blue-300">
-                            {seller.imageUrl ? (
-                              <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <span className="text-xs font-bold text-black">{seller.name.charAt(0).toUpperCase()}</span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-800 text-sm">{seller.name}</p>
-                            <p className="text-xs text-slate-500">#{index + 1}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-blue-700">{formatCurrency(seller.amount)}</p>
-                          <p className="text-xs text-slate-500">månaden</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

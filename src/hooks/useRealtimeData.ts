@@ -8,6 +8,7 @@ interface Sale {
   seller_id?: string;
   amount: number;
   timestamp: string;
+  service_type?: string;
 }
 
 interface Seller {

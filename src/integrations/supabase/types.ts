@@ -135,6 +135,7 @@ export type Database = {
           id: string
           seller_id: string | null
           seller_name: string
+          service_type: string | null
           timestamp: string
           updated_at: string
         }
@@ -144,6 +145,7 @@ export type Database = {
           id?: string
           seller_id?: string | null
           seller_name: string
+          service_type?: string | null
           timestamp?: string
           updated_at?: string
         }
@@ -153,6 +155,7 @@ export type Database = {
           id?: string
           seller_id?: string | null
           seller_name?: string
+          service_type?: string | null
           timestamp?: string
           updated_at?: string
         }
