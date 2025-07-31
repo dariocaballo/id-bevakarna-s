@@ -7,6 +7,8 @@ interface Sale {
   seller_name: string;
   seller_id?: string;
   amount: number;
+  tb_amount?: number;
+  units?: number;
   timestamp: string;
   service_type?: string;
 }
@@ -137,18 +139,24 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         return saleDate >= monthStart;
       });
       
-      // Calculate totals
-      const todaysTotal = todaysSales.reduce((sum: number, sale: Sale) => sum + sale.amount, 0);
-      const monthsTotal = monthsSales.reduce((sum: number, sale: Sale) => sum + sale.amount, 0);
+      // Calculate totals using tb_amount for non-id_bevakarna services
+      const todaysTotal = todaysSales
+        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
+      const monthsTotal = monthsSales
+        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
       
-      // Calculate seller rankings
+      // Calculate seller rankings using tb_amount for non-id_bevakarna services
       const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      monthsSales.forEach((sale: Sale) => {
-        if (!monthlySellerTotals[sale.seller_name]) {
-          monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        monthlySellerTotals[sale.seller_name].amount += sale.amount;
-      });
+      monthsSales
+        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .forEach((sale: Sale) => {
+          if (!monthlySellerTotals[sale.seller_name]) {
+            monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
+          }
+          monthlySellerTotals[sale.seller_name].amount += (sale.tb_amount || sale.amount || 0);
+        });
       
       const topSellersArray = Object.entries(monthlySellerTotals)
         .map(([name, data]) => {
@@ -162,14 +170,16 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
       
-      // Calculate today's sellers
+      // Calculate today's sellers using tb_amount for non-id_bevakarna services
       const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      todaysSales.forEach((sale: Sale) => {
-        if (!todaysSellerTotals[sale.seller_name]) {
-          todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        todaysSellerTotals[sale.seller_name].amount += sale.amount;
-      });
+      todaysSales
+        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .forEach((sale: Sale) => {
+          if (!todaysSellerTotals[sale.seller_name]) {
+            todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
+          }
+          todaysSellerTotals[sale.seller_name].amount += (sale.tb_amount || sale.amount || 0);
+        });
       
       const todaysSellersArray = Object.entries(todaysSellerTotals)
         .map(([name, data]) => {

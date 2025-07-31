@@ -13,6 +13,8 @@ interface Sale {
   seller_name: string;
   seller_id?: string;
   amount: number;
+  tb_amount?: number;
+  units?: number;
   timestamp: string;
   service_type?: string;
 }
@@ -117,7 +119,7 @@ const Dashboard = () => {
         const { data, error } = await supabase
           .from('sales')
           .select('*')
-          .eq('service_type', 'id-bevakarna')
+          .eq('service_type', 'id_bevakarna')
           .gte('timestamp', august1.toISOString())
           .lte('timestamp', september30.toISOString());
         
@@ -131,12 +133,12 @@ const Dashboard = () => {
     fetchIdSales();
   }, []);
 
-  // Calculate El Clásico competition data (ID-skydd count per seller)
+  // Calculate El Clásico competition data (ID-skydd count per seller using units)
   const elClasicoData = useMemo(() => {
-    // Calculate ID-skydd count per seller (assuming each sale = 1 ID-skydd)
+    // Calculate ID-skydd count per seller using the units field
     const sellerIdCounts: { [key: string]: number } = {};
     idSales.forEach(sale => {
-      sellerIdCounts[sale.seller_name] = (sellerIdCounts[sale.seller_name] || 0) + 1;
+      sellerIdCounts[sale.seller_name] = (sellerIdCounts[sale.seller_name] || 0) + (sale.units || 1);
     });
 
     // Create array with seller data

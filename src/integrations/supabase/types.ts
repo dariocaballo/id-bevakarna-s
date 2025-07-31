@@ -136,7 +136,9 @@ export type Database = {
           seller_id: string | null
           seller_name: string
           service_type: string | null
+          tb_amount: number | null
           timestamp: string
+          units: number | null
           updated_at: string
         }
         Insert: {
@@ -146,7 +148,9 @@ export type Database = {
           seller_id?: string | null
           seller_name: string
           service_type?: string | null
+          tb_amount?: number | null
           timestamp?: string
+          units?: number | null
           updated_at?: string
         }
         Update: {
@@ -156,7 +160,9 @@ export type Database = {
           seller_id?: string | null
           seller_name?: string
           service_type?: string | null
+          tb_amount?: number | null
           timestamp?: string
+          units?: number | null
           updated_at?: string
         }
         Relationships: [

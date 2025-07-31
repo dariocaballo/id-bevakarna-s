@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { User, DollarSign, CheckCircle } from 'lucide-react';
+import { User, DollarSign, CheckCircle, X, Shield, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useImageCache } from '@/hooks/useImageCache';
 
@@ -17,12 +17,25 @@ interface Seller {
   monthly_goal: number;
 }
 
+interface Sale {
+  id: string;
+  seller_name: string;
+  seller_id?: string;
+  tb_amount: number;
+  units: number;
+  service_type: string;
+  timestamp: string;
+}
+
 const Seller = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
-  const [selectedSellerId, setSelectedSellerId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [serviceType, setServiceType] = useState<'sstnet' | 'id-bevakarna'>('sstnet');
+  const [selectedSellerIdTB, setSelectedSellerIdTB] = useState('');
+  const [selectedSellerIdSkydd, setSelectedSellerIdSkydd] = useState('');
+  const [tbAmount, setTbAmount] = useState('');
+  const [idUnits, setIdUnits] = useState('');
+  const [isSubmittingTB, setIsSubmittingTB] = useState(false);
+  const [isSubmittingSkydd, setIsSubmittingSkydd] = useState(false);
+  const [todaysSales, setTodaysSales] = useState<Sale[]>([]);
   const { toast } = useToast();
   
   // Image optimization hook
@@ -30,6 +43,7 @@ const Seller = () => {
 
   useEffect(() => {
     loadSellers();
+    loadTodaysSales();
   }, []);
 
   const loadSellers = async () => {
@@ -69,62 +83,100 @@ const Seller = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent, submissionServiceType: 'sstnet' | 'id-bevakarna') => {
-    e.preventDefault();
-    
-    if (!selectedSellerId || !amount.trim()) {
-      toast({
-        title: "Fyll i alla fält",
-        description: "Både säljare och belopp krävs för att rapportera försäljning.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const numericAmount = parseFloat(amount.replace(/[^\d.,]/g, '').replace(',', '.'));
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      toast({
-        title: "Ogiltigt belopp",
-        description: "Ange ett giltigt belopp i TB.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
+  const loadTodaysSales = async () => {
     try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerId);
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
       
-      // Save to Supabase with service_type
       const { data, error } = await supabase
         .from('sales')
-        .insert([
-          {
-            seller_id: selectedSellerId,
-            seller_name: selectedSeller?.name || '',
-            amount: numericAmount,
-            service_type: submissionServiceType
-          }
-        ])
-        .select()
-        .single();
+        .select('*')
+        .gte('timestamp', startOfDay)
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+      setTodaysSales(data || []);
+    } catch (error) {
+      console.error('❌ Error loading today\'s sales:', error);
+    }
+  };
+
+  const handleDeleteSale = async (saleId: string) => {
+    try {
+      const { error } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', saleId);
 
       if (error) throw error;
 
-      // NO AUDIO on seller page - only dashboard plays sounds and celebrates
-      console.log('✅ Sale saved to database - dashboard will handle celebration via realtime');
-
-      const serviceDisplayName = submissionServiceType === 'sstnet' ? 'SSTNET' : 'ID-Bevakarna';
       toast({
-        title: `${serviceDisplayName} försäljning rapporterad! 🎉`,
-        description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} TB`,
-        className: "success-gradient text-white border-success"
+        title: "Försäljning borttagen",
+        description: "Försäljningen har tagits bort framgångsrikt.",
       });
 
-      // Reset form
-      setAmount('');
-      setSelectedSellerId('');
+      // Reload today's sales
+      loadTodaysSales();
+    } catch (error) {
+      toast({
+        title: "Fel",
+        description: "Kunde inte ta bort försäljningen.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleSubmitTB = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedSellerIdTB || !tbAmount.trim()) {
+      toast({
+        title: "Fyll i alla fält",
+        description: "Både säljare och TB-belopp krävs.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const numericAmount = parseFloat(tbAmount.replace(/[^\d.,]/g, '').replace(',', '.'));
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      toast({
+        title: "Ogiltigt belopp",
+        description: "Ange ett giltigt TB-belopp.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSubmittingTB(true);
+
+    try {
+      const selectedSeller = sellers.find(s => s.id === selectedSellerIdTB);
+      
+      const { error } = await supabase
+        .from('sales')
+        .insert([
+          {
+            seller_id: selectedSellerIdTB,
+            seller_name: selectedSeller?.name || '',
+            service_type: 'sstnet',
+            tb_amount: numericAmount,
+            units: 0,
+            amount: numericAmount // Keep for backwards compatibility
+          }
+        ]);
+
+      if (error) throw error;
+
+      toast({
+        title: "TB-försäljning rapporterad! 🎉",
+        description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} TB`,
+      });
+
+      // Reset form and reload data
+      setTbAmount('');
+      setSelectedSellerIdTB('');
+      loadTodaysSales();
       
     } catch (error) {
       toast({
@@ -133,7 +185,70 @@ const Seller = () => {
         variant: "destructive"
       });
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingTB(false);
+    }
+  };
+
+  const handleSubmitIdSkydd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedSellerIdSkydd || !idUnits.trim()) {
+      toast({
+        title: "Fyll i alla fält",
+        description: "Både säljare och antal ID-skydd krävs.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const numericUnits = parseInt(idUnits);
+    if (isNaN(numericUnits) || numericUnits <= 0) {
+      toast({
+        title: "Ogiltigt antal",
+        description: "Ange ett giltigt antal ID-skydd.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSubmittingSkydd(true);
+
+    try {
+      const selectedSeller = sellers.find(s => s.id === selectedSellerIdSkydd);
+      
+      const { error } = await supabase
+        .from('sales')
+        .insert([
+          {
+            seller_id: selectedSellerIdSkydd,
+            seller_name: selectedSeller?.name || '',
+            service_type: 'id_bevakarna',
+            tb_amount: 0,
+            units: numericUnits,
+            amount: 0 // Keep for backwards compatibility
+          }
+        ]);
+
+      if (error) throw error;
+
+      toast({
+        title: "ID-skydd rapporterat! 🛡️",
+        description: `${selectedSeller?.name} sålde ${numericUnits} ID-skydd`,
+      });
+
+      // Reset form and reload data
+      setIdUnits('');
+      setSelectedSellerIdSkydd('');
+      loadTodaysSales();
+      
+    } catch (error) {
+      toast({
+        title: "Något gick fel",
+        description: "Försök igen om en stund.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingSkydd(false);
     }
   };
 
@@ -163,21 +278,24 @@ const Seller = () => {
         {/* Två rapporteringskort enligt spec */}
         <div className="grid gap-6 md:grid-cols-2">
           
-          {/* 1️⃣ Rapportera SSTNET */}
+          {/* 🔵 TB-sälj (SSTNET) */}
           <Card className="card-shadow border-0">
             <CardHeader className="text-center pb-4 bg-blue-50">
-              <CardTitle className="text-xl text-blue-700">Rapportera SSTNET</CardTitle>
-              <p className="text-sm text-blue-600">Standardförsäljning</p>
+              <CardTitle className="text-xl text-blue-700 flex items-center justify-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                TB-sälj (SSTNET)
+              </CardTitle>
+              <p className="text-sm text-blue-600">TB-belopp för standardförsäljning</p>
             </CardHeader>
             <CardContent className="pt-6">
-              <form onSubmit={(e) => handleSubmit(e, 'sstnet')} className="space-y-4">
+              <form onSubmit={handleSubmitTB} className="space-y-4">
                 {/* Säljare dropdown */}
                 <div className="space-y-2">
-                  <Label htmlFor="seller-sstnet" className="text-sm font-medium flex items-center gap-2">
+                  <Label htmlFor="seller-tb" className="text-sm font-medium flex items-center gap-2">
                     <User className="w-4 h-4 text-primary" />
                     Säljare
                   </Label>
-                  <Select value={selectedSellerId} onValueChange={setSelectedSellerId} disabled={isSubmitting}>
+                  <Select value={selectedSellerIdTB} onValueChange={setSelectedSellerIdTB} disabled={isSubmittingTB}>
                     <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
                       <SelectValue placeholder="Välj säljare" />
                     </SelectTrigger>
@@ -212,30 +330,30 @@ const Seller = () => {
                   </Select>
                 </div>
 
-                {/* Belopp */}
+                {/* TB-belopp */}
                 <div className="space-y-2">
-                  <Label htmlFor="amount-sstnet" className="text-sm font-medium flex items-center gap-2">
+                  <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-primary" />
-                    Belopp (TB)
+                    TB-belopp
                   </Label>
                   <Input
-                    id="amount-sstnet"
+                    id="tb-amount"
                     type="text"
-                    placeholder="ex. 15 000"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="ex. 3400"
+                    value={tbAmount}
+                    onChange={(e) => setTbAmount(e.target.value)}
                     className="smooth-transition focus:ring-primary/20 focus:border-primary text-lg"
-                    disabled={isSubmitting}
+                    disabled={isSubmittingTB}
                   />
                 </div>
 
                 {/* Submit knapp */}
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !selectedSellerId}
+                  disabled={isSubmittingTB || !selectedSellerIdTB}
                   className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
                 >
-                  {isSubmitting ? (
+                  {isSubmittingTB ? (
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       Rapporterar...
@@ -243,7 +361,7 @@ const Seller = () => {
                   ) : (
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-5 h-5" />
-                      Rapportera
+                      Rapportera TB
                     </div>
                   )}
                 </Button>
@@ -251,21 +369,24 @@ const Seller = () => {
             </CardContent>
           </Card>
 
-          {/* 2️⃣ Rapportera ID-Bevakarna */}
+          {/* 🟢 ID-skydd (El Clásico) */}
           <Card className="card-shadow border-0">
             <CardHeader className="text-center pb-4 bg-green-50">
-              <CardTitle className="text-xl text-green-700">Rapportera ID-Bevakarna</CardTitle>
-              <p className="text-sm text-green-600">ID-skydd (räknas mot El Clásico)</p>
+              <CardTitle className="text-xl text-green-700 flex items-center justify-center gap-2">
+                <Shield className="w-5 h-5" />
+                ID-skydd (El Clásico)
+              </CardTitle>
+              <p className="text-sm text-green-600">Antal sålda ID-skydd</p>
             </CardHeader>
             <CardContent className="pt-6">
-              <form onSubmit={(e) => handleSubmit(e, 'id-bevakarna')} className="space-y-4">
+              <form onSubmit={handleSubmitIdSkydd} className="space-y-4">
                 {/* Säljare dropdown */}
                 <div className="space-y-2">
-                  <Label htmlFor="seller-id" className="text-sm font-medium flex items-center gap-2">
+                  <Label htmlFor="seller-skydd" className="text-sm font-medium flex items-center gap-2">
                     <User className="w-4 h-4 text-primary" />
                     Säljare
                   </Label>
-                  <Select value={selectedSellerId} onValueChange={setSelectedSellerId} disabled={isSubmitting}>
+                  <Select value={selectedSellerIdSkydd} onValueChange={setSelectedSellerIdSkydd} disabled={isSubmittingSkydd}>
                     <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
                       <SelectValue placeholder="Välj säljare" />
                     </SelectTrigger>
@@ -300,30 +421,31 @@ const Seller = () => {
                   </Select>
                 </div>
 
-                {/* Belopp */}
+                {/* Antal ID-skydd */}
                 <div className="space-y-2">
-                  <Label htmlFor="amount-id" className="text-sm font-medium flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-primary" />
-                    Belopp (TB)
+                  <Label htmlFor="id-units" className="text-sm font-medium flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" />
+                    Antal ID-skydd
                   </Label>
                   <Input
-                    id="amount-id"
-                    type="text"
-                    placeholder="ex. 15 000"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    id="id-units"
+                    type="number"
+                    placeholder="ex. 2"
+                    value={idUnits}
+                    onChange={(e) => setIdUnits(e.target.value)}
                     className="smooth-transition focus:ring-primary/20 focus:border-primary text-lg"
-                    disabled={isSubmitting}
+                    disabled={isSubmittingSkydd}
+                    min="1"
                   />
                 </div>
 
                 {/* Submit knapp */}
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !selectedSellerId}
+                  disabled={isSubmittingSkydd || !selectedSellerIdSkydd}
                   className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
                 >
-                  {isSubmitting ? (
+                  {isSubmittingSkydd ? (
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       Rapporterar...
@@ -331,7 +453,7 @@ const Seller = () => {
                   ) : (
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-5 h-5" />
-                      Rapportera
+                      Rapportera ID-skydd
                     </div>
                   )}
                 </Button>
@@ -339,6 +461,52 @@ const Seller = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* 🧾 Mina försäljningar - dagens lista */}
+        <Card className="card-shadow border-0 mt-8">
+          <CardHeader>
+            <CardTitle className="text-xl text-slate-700 flex items-center gap-2">
+              🧾 Mina försäljningar (idag)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {todaysSales.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">Inga försäljningar registrerade idag</p>
+            ) : (
+              <div className="space-y-3">
+                {todaysSales.map((sale) => (
+                  <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${sale.service_type === 'id_bevakarna' ? 'bg-green-500' : 'bg-blue-500'}`} />
+                      <div>
+                        <p className="font-semibold text-gray-900">{sale.seller_name}</p>
+                        <p className="text-sm text-gray-600">
+                          {sale.service_type === 'id_bevakarna' 
+                            ? `${sale.units} ID-skydd` 
+                            : `${formatCurrency(sale.tb_amount)}`}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(sale.timestamp).toLocaleTimeString('sv-SE', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteSale(sale.id)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Info om El Clásico tävlingen */}
         <Card className="card-shadow border-0 mt-8 bg-gradient-to-r from-yellow-50 to-yellow-100">
