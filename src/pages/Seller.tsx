@@ -31,10 +31,14 @@ const Seller = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [selectedSellerIdTB, setSelectedSellerIdTB] = useState('');
   const [selectedSellerIdSkydd, setSelectedSellerIdSkydd] = useState('');
+  const [selectedSellerIdCombined, setSelectedSellerIdCombined] = useState('');
   const [tbAmount, setTbAmount] = useState('');
   const [idUnits, setIdUnits] = useState('');
+  const [tbAmountCombined, setTbAmountCombined] = useState('');
+  const [idUnitsCombined, setIdUnitsCombined] = useState('');
   const [isSubmittingTB, setIsSubmittingTB] = useState(false);
   const [isSubmittingSkydd, setIsSubmittingSkydd] = useState(false);
+  const [isSubmittingCombined, setIsSubmittingCombined] = useState(false);
   const [todaysSales, setTodaysSales] = useState<Sale[]>([]);
   const { toast } = useToast();
   
@@ -252,6 +256,108 @@ const Seller = () => {
     }
   };
 
+  const handleSubmitCombined = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedSellerIdCombined) {
+      toast({
+        title: "Välj säljare",
+        description: "Du måste välja en säljare.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const hasTB = tbAmountCombined.trim();
+    const hasUnits = idUnitsCombined.trim();
+
+    if (!hasTB && !hasUnits) {
+      toast({
+        title: "Fyll i minst ett fält",
+        description: "Ange antingen TB-belopp eller antal ID-skydd (eller båda).",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    let numericTB = 0;
+    let numericUnits = 0;
+
+    if (hasTB) {
+      numericTB = parseFloat(tbAmountCombined.replace(/[^\d.,]/g, '').replace(',', '.'));
+      if (isNaN(numericTB) || numericTB < 0) {
+        toast({
+          title: "Ogiltigt TB-belopp",
+          description: "Ange ett giltigt TB-belopp.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    if (hasUnits) {
+      numericUnits = parseInt(idUnitsCombined);
+      if (isNaN(numericUnits) || numericUnits < 0) {
+        toast({
+          title: "Ogiltigt antal ID-skydd",
+          description: "Ange ett giltigt antal ID-skydd.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    setIsSubmittingCombined(true);
+
+    try {
+      const selectedSeller = sellers.find(s => s.id === selectedSellerIdCombined);
+      
+      const { error } = await supabase
+        .from('sales')
+        .insert([
+          {
+            seller_id: selectedSellerIdCombined,
+            seller_name: selectedSeller?.name || '',
+            service_type: hasUnits ? 'combined' : 'sstnet',
+            tb_amount: numericTB,
+            units: numericUnits,
+            amount: numericTB // Keep for backwards compatibility
+          }
+        ]);
+
+      if (error) throw error;
+
+      let description = `${selectedSeller?.name} rapporterade`;
+      if (hasTB && hasUnits) {
+        description += ` ${numericTB.toLocaleString('sv-SE')} TB + ${numericUnits} ID-skydd`;
+      } else if (hasTB) {
+        description += ` ${numericTB.toLocaleString('sv-SE')} TB`;
+      } else {
+        description += ` ${numericUnits} ID-skydd`;
+      }
+
+      toast({
+        title: "Försäljning rapporterad! 🎉",
+        description,
+      });
+
+      // Reset form and reload data
+      setTbAmountCombined('');
+      setIdUnitsCombined('');
+      setSelectedSellerIdCombined('');
+      loadTodaysSales();
+      
+    } catch (error) {
+      toast({
+        title: "Något gick fel",
+        description: "Försök igen om en stund.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingCombined(false);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
       minimumFractionDigits: 0,
@@ -275,192 +381,117 @@ const Seller = () => {
           <p className="text-muted-foreground">Säljrapportering</p>
         </div>
 
-        {/* Två rapporteringskort enligt spec */}
-        <div className="grid gap-6 md:grid-cols-2">
-          
-          {/* 🔵 TB-sälj (SSTNET) */}
-          <Card className="card-shadow border-0">
-            <CardHeader className="text-center pb-4 bg-blue-50">
-              <CardTitle className="text-xl text-blue-700 flex items-center justify-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                TB-sälj (SSTNET)
-              </CardTitle>
-              <p className="text-sm text-blue-600">TB-belopp för standardförsäljning</p>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <form onSubmit={handleSubmitTB} className="space-y-4">
-                {/* Säljare dropdown */}
-                <div className="space-y-2">
-                  <Label htmlFor="seller-tb" className="text-sm font-medium flex items-center gap-2">
-                    <User className="w-4 h-4 text-primary" />
-                    Säljare
-                  </Label>
-                  <Select value={selectedSellerIdTB} onValueChange={setSelectedSellerIdTB} disabled={isSubmittingTB}>
-                    <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
-                      <SelectValue placeholder="Välj säljare" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200 shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {sellers.map((seller) => (
-                        <SelectItem 
-                          key={seller.id} 
-                          value={seller.id}
-                          className="cursor-pointer hover:bg-blue-50 focus:bg-blue-50"
-                        >
-                          <div className="flex items-center gap-2 w-full">
-                            {seller.profile_image_url ? (
-                              <img 
-                                src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
-                                alt={seller.name} 
-                                className="w-6 h-6 rounded-full object-cover border border-gray-200"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                  const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                                  if (fallback) fallback.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-800" style={{display: seller.profile_image_url ? 'none' : 'flex'}}>
-                              {seller.name.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="font-medium text-gray-900">{seller.name}</span>
+          {/* Kombinerad rapportering för TB + ID-skydd */}
+        <Card className="card-shadow border-0 mb-6">
+          <CardHeader className="text-center pb-4 bg-gradient-to-r from-blue-50 to-green-50">
+            <CardTitle className="text-xl text-slate-700 flex items-center justify-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              <Shield className="w-5 h-5" />
+              Kombinerad rapportering
+            </CardTitle>
+            <p className="text-sm text-slate-600">Rapportera TB och/eller ID-skydd samtidigt</p>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSubmitCombined} className="space-y-4">
+              {/* Säljare dropdown */}
+              <div className="space-y-2">
+                <Label htmlFor="seller-combined" className="text-sm font-medium flex items-center gap-2">
+                  <User className="w-4 h-4 text-primary" />
+                  Säljare
+                </Label>
+                <Select value={selectedSellerIdCombined} onValueChange={setSelectedSellerIdCombined} disabled={isSubmittingCombined}>
+                  <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
+                    <SelectValue placeholder="Välj säljare" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border border-gray-200 shadow-lg z-50 max-h-60 overflow-y-auto">
+                    {sellers.map((seller) => (
+                      <SelectItem 
+                        key={seller.id} 
+                        value={seller.id}
+                        className="cursor-pointer hover:bg-slate-50 focus:bg-slate-50"
+                      >
+                        <div className="flex items-center gap-2 w-full">
+                          {seller.profile_image_url ? (
+                            <img 
+                              src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
+                              alt={seller.name} 
+                              className="w-6 h-6 rounded-full object-cover border border-gray-200"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-800" style={{display: seller.profile_image_url ? 'none' : 'flex'}}>
+                            {seller.name.charAt(0).toUpperCase()}
                           </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                          <span className="font-medium text-gray-900">{seller.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 {/* TB-belopp */}
                 <div className="space-y-2">
-                  <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-primary" />
-                    TB-belopp
+                  <Label htmlFor="tb-amount-combined" className="text-sm font-medium flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    TB-belopp (valfritt)
                   </Label>
                   <Input
-                    id="tb-amount"
+                    id="tb-amount-combined"
                     type="text"
                     placeholder="ex. 3400"
-                    value={tbAmount}
-                    onChange={(e) => setTbAmount(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary text-lg"
-                    disabled={isSubmittingTB}
+                    value={tbAmountCombined}
+                    onChange={(e) => setTbAmountCombined(e.target.value)}
+                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
+                    disabled={isSubmittingCombined}
                   />
-                </div>
-
-                {/* Submit knapp */}
-                <Button
-                  type="submit"
-                  disabled={isSubmittingTB || !selectedSellerIdTB}
-                  className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
-                >
-                  {isSubmittingTB ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Rapporterar...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5" />
-                      Rapportera TB
-                    </div>
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* 🟢 ID-skydd (El Clásico) */}
-          <Card className="card-shadow border-0">
-            <CardHeader className="text-center pb-4 bg-green-50">
-              <CardTitle className="text-xl text-green-700 flex items-center justify-center gap-2">
-                <Shield className="w-5 h-5" />
-                ID-skydd (El Clásico)
-              </CardTitle>
-              <p className="text-sm text-green-600">Antal sålda ID-skydd</p>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <form onSubmit={handleSubmitIdSkydd} className="space-y-4">
-                {/* Säljare dropdown */}
-                <div className="space-y-2">
-                  <Label htmlFor="seller-skydd" className="text-sm font-medium flex items-center gap-2">
-                    <User className="w-4 h-4 text-primary" />
-                    Säljare
-                  </Label>
-                  <Select value={selectedSellerIdSkydd} onValueChange={setSelectedSellerIdSkydd} disabled={isSubmittingSkydd}>
-                    <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
-                      <SelectValue placeholder="Välj säljare" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200 shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {sellers.map((seller) => (
-                        <SelectItem 
-                          key={seller.id} 
-                          value={seller.id}
-                          className="cursor-pointer hover:bg-green-50 focus:bg-green-50"
-                        >
-                          <div className="flex items-center gap-2 w-full">
-                            {seller.profile_image_url ? (
-                              <img 
-                                src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
-                                alt={seller.name} 
-                                className="w-6 h-6 rounded-full object-cover border border-gray-200"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                  const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                                  if (fallback) fallback.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-xs font-bold text-green-800" style={{display: seller.profile_image_url ? 'none' : 'flex'}}>
-                              {seller.name.charAt(0).toUpperCase()}
-                            </div>
-                            <span className="font-medium text-gray-900">{seller.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 {/* Antal ID-skydd */}
                 <div className="space-y-2">
-                  <Label htmlFor="id-units" className="text-sm font-medium flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-primary" />
-                    Antal ID-skydd
+                  <Label htmlFor="id-units-combined" className="text-sm font-medium flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-green-600" />
+                    ID-skydd (valfritt)
                   </Label>
                   <Input
-                    id="id-units"
+                    id="id-units-combined"
                     type="number"
                     placeholder="ex. 2"
-                    value={idUnits}
-                    onChange={(e) => setIdUnits(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary text-lg"
-                    disabled={isSubmittingSkydd}
-                    min="1"
+                    value={idUnitsCombined}
+                    onChange={(e) => setIdUnitsCombined(e.target.value)}
+                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
+                    disabled={isSubmittingCombined}
+                    min="0"
                   />
                 </div>
+              </div>
 
-                {/* Submit knapp */}
-                <Button
-                  type="submit"
-                  disabled={isSubmittingSkydd || !selectedSellerIdSkydd}
-                  className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
-                >
-                  {isSubmittingSkydd ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Rapporterar...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5" />
-                      Rapportera ID-skydd
-                    </div>
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+              {/* Submit knapp */}
+              <Button
+                type="submit"
+                disabled={isSubmittingCombined || !selectedSellerIdCombined || (!tbAmountCombined.trim() && !idUnitsCombined.trim())}
+                className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
+              >
+                {isSubmittingCombined ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Rapporterar...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5" />
+                    Rapportera försäljning
+                  </div>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
         {/* 🧾 Mina försäljningar - dagens lista */}
         <Card className="card-shadow border-0 mt-8">

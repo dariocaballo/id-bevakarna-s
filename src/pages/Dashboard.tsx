@@ -5,7 +5,8 @@ import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAudioManager } from '@/hooks/useAudioManager';
 import { useImageCache } from '@/hooks/useImageCache';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
-import { Trophy, Medal, Crown } from 'lucide-react';
+import { Trophy, Medal, Crown, X, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Sale {
@@ -101,6 +102,7 @@ const Dashboard = () => {
 
   // State for El Clásico competition data
   const [idSales, setIdSales] = useState<Sale[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   
   // Load El Clásico data
   useEffect(() => {
@@ -119,7 +121,7 @@ const Dashboard = () => {
         const { data, error } = await supabase
           .from('sales')
           .select('*')
-          .eq('service_type', 'id_bevakarna')
+          .or('service_type.eq.id_bevakarna,service_type.eq.combined')
           .gte('timestamp', august1.toISOString())
           .lte('timestamp', september30.toISOString());
         
@@ -131,6 +133,22 @@ const Dashboard = () => {
     };
     
     fetchIdSales();
+
+    // Subscribe to realtime updates for El Clásico data
+    const channel = supabase
+      .channel('el-clasico-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales' },
+        () => {
+          fetchIdSales(); // Reload El Clásico data on any sales change
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Calculate El Clásico competition data (ID-skydd count per seller using units)
@@ -138,7 +156,10 @@ const Dashboard = () => {
     // Calculate ID-skydd count per seller using the units field
     const sellerIdCounts: { [key: string]: number } = {};
     idSales.forEach(sale => {
-      sellerIdCounts[sale.seller_name] = (sellerIdCounts[sale.seller_name] || 0) + (sale.units || 1);
+      // Count units for id_bevakarna and combined sales
+      if (sale.service_type === 'id_bevakarna' || sale.service_type === 'combined') {
+        sellerIdCounts[sale.seller_name] = (sellerIdCounts[sale.seller_name] || 0) + (sale.units || 0);
+      }
     });
 
     // Create array with seller data
@@ -152,6 +173,23 @@ const Dashboard = () => {
       };
     }).sort((a, b) => b.idCount - a.idCount);
   }, [sellers, idSales]);
+
+  const handleDeleteSale = async (saleId: string, isToday: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', saleId);
+
+      if (error) throw error;
+
+      // The realtime subscription will automatically update the data
+      setShowDeleteConfirm(null);
+      
+    } catch (error) {
+      console.error('Error deleting sale:', error);
+    }
+  };
 
   // Enhanced initialization for 24/7 TV operation
   useEffect(() => {
@@ -352,8 +390,18 @@ const Dashboard = () => {
             {/* 🏆 El Clásico */}
             <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
-                  🏆 El Clásico
+                <CardTitle className="text-base text-slate-700 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-2">🏆 El Clásico</span>
+                  {(todaysSellers.length > 0 || topSellers.length > 0) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowDeleteConfirm(showDeleteConfirm ? null : 'dashboard')}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="overflow-y-auto">
@@ -374,6 +422,36 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
+                
+                {/* Delete confirmation panel */}
+                {showDeleteConfirm === 'dashboard' && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-red-800 mb-2">Ta bort försäljningar</h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {[...totalToday > 0 ? todaysSellers : [], ...totalMonth > 0 ? topSellers : []].slice(0, 10).map((seller, index) => (
+                        <div key={`${seller.name}-${index}`} className="flex items-center justify-between text-xs">
+                          <span className="text-slate-700">{seller.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteSale(seller.name, true)}
+                            className="text-red-600 hover:text-red-700 h-6 px-2"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowDeleteConfirm(null)}
+                      className="mt-2 w-full text-slate-600"
+                    >
+                      Stäng
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -139,7 +139,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         return saleDate >= monthStart;
       });
       
-      // Calculate totals using tb_amount for non-id_bevakarna services
+      // Calculate totals using tb_amount for non-id_bevakarna services (including combined sales)
       const todaysTotal = todaysSales
         .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
         .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
@@ -147,7 +147,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
         .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
       
-      // Calculate seller rankings using tb_amount for non-id_bevakarna services
+      // Calculate seller rankings using tb_amount for non-id_bevakarna services (including combined sales)
       const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
       monthsSales
         .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
@@ -170,7 +170,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
       
-      // Calculate today's sellers using tb_amount for non-id_bevakarna services
+      // Calculate today's sellers using tb_amount for non-id_bevakarna services (including combined sales)
       const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
       todaysSales
         .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
