@@ -18,6 +18,7 @@ interface Sale {
   units?: number;
   timestamp: string;
   service_type?: string;
+  is_id_skydd?: boolean;
 }
 
 interface Seller {
@@ -37,13 +38,16 @@ const Dashboard = () => {
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
     console.log('🎆🎆🎆 DASHBOARD CELEBRATION TRIGGERED! 🎆🎆🎆');
+    console.log('🎯 Ny försäljning:', `seller_id=${sale.seller_id}, tb=${sale.tb_amount || sale.amount}, is_id_skydd=${sale.service_type}`);
     console.log('📊 Sale details:', {
       id: sale.id,
       seller_name: sale.seller_name,
       seller_id: sale.seller_id,
       amount: sale.amount,
-      timestamp: sale.timestamp,
-      service_type: sale.service_type
+      tb_amount: sale.tb_amount,
+      units: sale.units,
+      service_type: sale.service_type,
+      timestamp: sale.timestamp
     });
     console.log('👤 Seller details:', seller);
     
@@ -53,12 +57,18 @@ const Dashboard = () => {
     // Play seller sound and get duration for celebration sync
     try {
       console.log('🎵 Attempting to play seller sound...');
+      if (seller?.sound_file_url) {
+        console.log(`🎵 Spelar: ${seller.sound_file_url} för ${seller.name}`);
+      }
+      
       const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
       
       if (audioResult.played) {
-        // Set celebration duration to match audio duration
-        console.log('🎵 Audio played successfully, duration:', audioResult.duration);
-        setCelebrationAudioDuration(audioResult.duration);
+        // Set celebration duration to match audio duration (convert to milliseconds)
+        const durationMs = audioResult.duration ? audioResult.duration * 1000 : 3000;
+        console.log('🎵 Audio played successfully, duration:', audioResult.duration, 'seconds =', durationMs, 'ms');
+        console.log('🎉 Celebration start');
+        setCelebrationAudioDuration(durationMs);
       } else {
         // Use default duration if no audio
         console.log('🎵 No custom audio, using default duration');
@@ -77,10 +87,21 @@ const Dashboard = () => {
   // Enhanced seller updates with live audio reloading for 24/7 operation
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
     console.log('🔄 Enhanced seller update - reloading audio files for TV operation...');
+    console.log('👤 Seller uppdaterad: reloading audio/images');
     await ensureAudioContextReady(); // Ensure audio is ready before reloading
     await preloadSellerSounds(updatedSellers); // Will automatically handle URL changes
-    console.log('✅ Enhanced seller audio update complete');
-  }, [preloadSellerSounds, ensureAudioContextReady]);
+    
+    // Preload updated seller images
+    const imageUrls = updatedSellers
+      .map(seller => seller.profile_image_url)
+      .filter(url => url) as string[];
+    
+    if (imageUrls.length > 0) {
+      preloadImages(imageUrls);
+    }
+    
+    console.log('✅ Enhanced seller audio update complete - live refetch/mapping klar');
+  }, [preloadSellerSounds, ensureAudioContextReady, preloadImages]);
 
   // Use enhanced realtime data hook with TV-optimized settings - ONLY on dashboard
   const {
@@ -300,6 +321,7 @@ const Dashboard = () => {
           sale={celebrationSale}
           sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
           onComplete={() => {
+            console.log('✅ Celebration end (onended)');
             setCelebrationSale(null);
             setCelebrationAudioDuration(undefined);
           }}

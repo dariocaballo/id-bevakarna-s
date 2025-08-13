@@ -25,6 +25,7 @@ interface Sale {
   units: number;
   service_type: string;
   timestamp: string;
+  is_id_skydd?: boolean;
 }
 
 const Seller = () => {
@@ -44,6 +45,33 @@ const Seller = () => {
   
   // Image optimization hook
   const { preloadImages, getCachedImage } = useImageCache();
+
+  // Realtime updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('seller-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales' },
+        () => {
+          console.log('🔄 Sales updated - refreshing seller view');
+          loadTodaysSales();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellers' },
+        () => {
+          console.log('🔄 Sellers updated - refreshing seller view');
+          loadSellers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     loadSellers();
@@ -107,6 +135,30 @@ const Seller = () => {
 
   const handleDeleteSale = async (saleId: string) => {
     try {
+      // Check if sale is from current month
+      const sale = todaysSales.find(s => s.id === saleId);
+      if (!sale) {
+        toast({
+          title: "Fel",
+          description: "Försäljningen kunde inte hittas.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const saleDate = new Date(sale.timestamp);
+      const now = new Date();
+      const isCurrentMonth = saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
+
+      if (!isCurrentMonth) {
+        toast({
+          title: "Kan inte ta bort",
+          description: "Du kan endast ta bort försäljningar från innevarande månad.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('sales')
         .delete()
@@ -114,17 +166,18 @@ const Seller = () => {
 
       if (error) throw error;
 
+      console.log('🗑️ Sale deleted:', saleId);
       toast({
         title: "Försäljning borttagen",
         description: "Försäljningen har tagits bort framgångsrikt.",
       });
 
-      // Reload today's sales
-      loadTodaysSales();
+      // Real-time will handle the refresh
     } catch (error) {
+      console.error('❌ Error deleting sale:', error);
       toast({
         title: "Fel",
-        description: "Kunde inte ta bort försäljningen.",
+        description: "Kunde inte ta bort försäljningen. Kontrollera att du har rätt behörigheter.",
         variant: "destructive"
       });
     }
@@ -166,6 +219,7 @@ const Seller = () => {
             service_type: 'sstnet',
             tb_amount: numericAmount,
             units: 0,
+            is_id_skydd: false,
             amount: numericAmount // Keep for backwards compatibility
           }
         ]);
@@ -177,10 +231,16 @@ const Seller = () => {
         description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} TB`,
       });
 
-      // Reset form and reload data
+      console.log('🎯 TB sale reported:', {
+        seller_id: selectedSellerIdTB,
+        seller_name: selectedSeller?.name,
+        tb_amount: numericAmount,
+        is_id_skydd: false
+      });
+
+      // Reset form - real-time will handle updates
       setTbAmount('');
       setSelectedSellerIdTB('');
-      loadTodaysSales();
       
     } catch (error) {
       toast({
@@ -229,6 +289,7 @@ const Seller = () => {
             service_type: 'id_bevakarna',
             tb_amount: 0,
             units: numericUnits,
+            is_id_skydd: true,
             amount: 0 // Keep for backwards compatibility
           }
         ]);
@@ -240,10 +301,16 @@ const Seller = () => {
         description: `${selectedSeller?.name} sålde ${numericUnits} ID-skydd`,
       });
 
-      // Reset form and reload data
+      console.log('🎯 ID-skydd sale reported:', {
+        seller_id: selectedSellerIdSkydd,
+        seller_name: selectedSeller?.name,
+        units: numericUnits,
+        is_id_skydd: true
+      });
+
+      // Reset form - real-time will handle updates
       setIdUnits('');
       setSelectedSellerIdSkydd('');
-      loadTodaysSales();
       
     } catch (error) {
       toast({
@@ -321,6 +388,7 @@ const Seller = () => {
             service_type: hasUnits ? 'combined' : 'sstnet',
             tb_amount: numericTB,
             units: numericUnits,
+            is_id_skydd: !!hasUnits,
             amount: numericTB // Keep for backwards compatibility
           }
         ]);
@@ -341,11 +409,18 @@ const Seller = () => {
         description,
       });
 
-      // Reset form and reload data
+      console.log('🎯 Combined sale reported:', {
+        seller_id: selectedSellerIdCombined,
+        seller_name: selectedSeller?.name,
+        tb_amount: numericTB,
+        units: numericUnits,
+        is_id_skydd: hasUnits
+      });
+
+      // Reset form - real-time will handle updates
       setTbAmountCombined('');
       setIdUnitsCombined('');
       setSelectedSellerIdCombined('');
-      loadTodaysSales();
       
     } catch (error) {
       toast({

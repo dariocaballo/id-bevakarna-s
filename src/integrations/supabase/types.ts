@@ -133,6 +133,7 @@ export type Database = {
           amount: number
           created_at: string
           id: string
+          is_id_skydd: boolean | null
           seller_id: string | null
           seller_name: string
           service_type: string | null
@@ -145,6 +146,7 @@ export type Database = {
           amount: number
           created_at?: string
           id?: string
+          is_id_skydd?: boolean | null
           seller_id?: string | null
           seller_name: string
           service_type?: string | null
@@ -157,6 +159,7 @@ export type Database = {
           amount?: number
           created_at?: string
           id?: string
+          is_id_skydd?: boolean | null
           seller_id?: string | null
           seller_name?: string
           service_type?: string | null

@@ -11,6 +11,7 @@ interface Sale {
   units?: number;
   timestamp: string;
   service_type?: string;
+  is_id_skydd?: boolean;
 }
 
 interface Seller {
@@ -139,18 +140,18 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         return saleDate >= monthStart;
       });
       
-      // Calculate totals using tb_amount for non-id_bevakarna services (including combined sales)
+      // Calculate totals using tb_amount for TB sales (both sstnet and combined with TB)
       const todaysTotal = todaysSales
-        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
         .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
       const monthsTotal = monthsSales
-        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
         .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
       
-      // Calculate seller rankings using tb_amount for non-id_bevakarna services (including combined sales)
+      // Calculate seller rankings using tb_amount for TB sales (both sstnet and combined with TB)
       const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
       monthsSales
-        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
         .forEach((sale: Sale) => {
           if (!monthlySellerTotals[sale.seller_name]) {
             monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
@@ -170,10 +171,10 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
       
-      // Calculate today's sellers using tb_amount for non-id_bevakarna services (including combined sales)
+      // Calculate today's sellers using tb_amount for TB sales (both sstnet and combined with TB)
       const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
       todaysSales
-        .filter((sale: Sale) => sale.service_type !== 'id_bevakarna')
+        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
         .forEach((sale: Sale) => {
           if (!todaysSellerTotals[sale.seller_name]) {
             todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
@@ -335,6 +336,10 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
             console.log('🎆 NEW SALE REALTIME UPDATE:', {
               seller: newSale.seller_name,
               amount: newSale.amount,
+              tb_amount: newSale.tb_amount,
+              units: newSale.units,
+              service_type: newSale.service_type,
+              is_id_skydd: newSale.is_id_skydd,
               timestamp: newSale.timestamp,
               id: newSale.id
             });
@@ -351,7 +356,8 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
               found: !!seller,
               searchedId: newSale.seller_id,
               searchedName: newSale.seller_name,
-              availableSellers: sellersCache.current.map(s => ({ id: s.id, name: s.name }))
+              sellerSoundUrl: seller?.sound_file_url,
+              availableSellers: sellersCache.current.map(s => ({ id: s.id, name: s.name, hasSound: !!s.sound_file_url }))
             });
             
             if (onNewSale) {
