@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { User, DollarSign, CheckCircle, X, Shield, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useImageCache } from '@/hooks/useImageCache';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Seller {
   id: string;
@@ -43,8 +44,17 @@ const Seller = () => {
   const [todaysSales, setTodaysSales] = useState<Sale[]>([]);
   const { toast } = useToast();
   
-  // Image optimization hook
+  // Auth and image optimization hooks
+  const { isAuthenticated, isLoading: authLoading, signInAnonymously } = useAuth();
   const { preloadImages, getCachedImage } = useImageCache();
+
+  // Auto-authenticate for development
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      console.log('🔐 Auto-authenticating for development...');
+      signInAnonymously();
+    }
+  }, [authLoading, isAuthenticated, signInAnonymously]);
 
   // Realtime updates
   useEffect(() => {
@@ -164,15 +174,25 @@ const Seller = () => {
         .delete()
         .eq('id', saleId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Delete sale failed:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw error;
+      }
 
-      console.log('🗑️ Sale deleted:', saleId);
+      console.log('🗑️ Sale deleted successfully:', saleId);
       toast({
-        title: "Försäljning borttagen",
-        description: "Försäljningen har tagits bort framgångsrikt.",
+        title: "Försäljning borttagen! 🗑️",
+        description: "Försäljningen har tagits bort från denna månad.",
       });
 
-      // Real-time will handle the refresh
+      // Real-time will handle the refresh automatically
+      loadTodaysSales(); // Refresh immediately for UI feedback
     } catch (error) {
       console.error('❌ Error deleting sale:', error);
       toast({
@@ -243,9 +263,17 @@ const Seller = () => {
       setSelectedSellerIdTB('');
       
     } catch (error) {
+      console.error('❌ TB sale reporting failed:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      
       toast({
         title: "Något gick fel",
-        description: "Försök igen om en stund.",
+        description: error.message || "Försök igen om en stund.",
         variant: "destructive"
       });
     } finally {
@@ -313,9 +341,17 @@ const Seller = () => {
       setSelectedSellerIdSkydd('');
       
     } catch (error) {
+      console.error('❌ ID-skydd sale reporting failed:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      
       toast({
         title: "Något gick fel",
-        description: "Försök igen om en stund.",
+        description: error.message || "Försök igen om en stund.",
         variant: "destructive"
       });
     } finally {
@@ -423,9 +459,17 @@ const Seller = () => {
       setSelectedSellerIdCombined('');
       
     } catch (error) {
+      console.error('❌ Combined sale reporting failed:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      
       toast({
         title: "Något gick fel",
-        description: "Försök igen om en stund.",
+        description: error.message || "Försök igen om en stund.",
         variant: "destructive"
       });
     } finally {

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAudioManager } from '@/hooks/useAudioManager';
 import { useImageCache } from '@/hooks/useImageCache';
+import { useAuth } from '@/hooks/useAuth';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Trophy, Medal, Crown, X, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,8 +33,17 @@ interface Seller {
 const Dashboard = () => {
   const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
+  const { isAuthenticated, isLoading: authLoading, signInAnonymously } = useAuth();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
+
+  // Auto-authenticate for development
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      console.log('🔐 Auto-authenticating dashboard for development...');
+      signInAnonymously();
+    }
+  }, [authLoading, isAuthenticated, signInAnonymously]);
   
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
