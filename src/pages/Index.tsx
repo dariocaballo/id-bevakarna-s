@@ -124,7 +124,15 @@ const Index = () => {
       <div className="text-center mt-16 pb-8 text-sm text-muted-foreground">
         <p>ID-Bevakarna Säljsystem v1.0</p>
         <p className="mt-2">Utvecklat för att motivera och inspirera ditt säljteam</p>
-        <div className="mt-4">
+        <div className="mt-4 flex gap-2 justify-center">
+          <Button 
+            asChild
+            variant="outline"
+            size="sm"
+            className="text-xs"
+          >
+            <Link to="/auth">🔐 Logga in</Link>
+          </Button>
           <Button 
             asChild
             variant="outline"

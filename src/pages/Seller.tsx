@@ -45,16 +45,40 @@ const Seller = () => {
   const { toast } = useToast();
   
   // Auth and image optimization hooks
-  const { isAuthenticated, isLoading: authLoading, signInAnonymously } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { preloadImages, getCachedImage } = useImageCache();
+  
+  // Get user's sellers
+  const [userSellers, setUserSellers] = useState<Seller[]>([]);
 
-  // Auto-authenticate for development
+  // Load user's assigned sellers
+  useEffect(() => {
+    const loadUserSellers = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('sellers')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('name');
+
+        if (error) throw error;
+        setUserSellers(data || []);
+      } catch (error) {
+        console.error('❌ Error loading user sellers:', error);
+      }
+    };
+
+    loadUserSellers();
+  }, [user]);
+
+  // Redirect to auth if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      console.log('🔐 Auto-authenticating for development...');
-      signInAnonymously();
+      window.location.href = '/auth';
     }
-  }, [authLoading, isAuthenticated, signInAnonymously]);
+  }, [authLoading, isAuthenticated]);
 
   // Realtime updates
   useEffect(() => {
@@ -228,7 +252,7 @@ const Seller = () => {
     setIsSubmittingTB(true);
 
     try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerIdTB);
+      const selectedSeller = userSellers.find(s => s.id === selectedSellerIdTB);
       
       const { error } = await supabase
         .from('sales')
@@ -306,7 +330,7 @@ const Seller = () => {
     setIsSubmittingSkydd(true);
 
     try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerIdSkydd);
+      const selectedSeller = userSellers.find(s => s.id === selectedSellerIdSkydd);
       
       const { error } = await supabase
         .from('sales')
@@ -413,7 +437,7 @@ const Seller = () => {
     setIsSubmittingCombined(true);
 
     try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerIdCombined);
+      const selectedSeller = userSellers.find(s => s.id === selectedSellerIdCombined);
       
       const { error } = await supabase
         .from('sales')
@@ -523,7 +547,7 @@ const Seller = () => {
                     <SelectValue placeholder="Välj säljare" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border border-gray-200 shadow-lg z-50 max-h-60 overflow-y-auto">
-                    {sellers.map((seller) => (
+                    {userSellers.map((seller) => (
                       <SelectItem 
                         key={seller.id} 
                         value={seller.id}

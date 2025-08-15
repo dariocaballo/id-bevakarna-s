@@ -33,17 +33,12 @@ interface Seller {
 const Dashboard = () => {
   const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
-  const { isAuthenticated, isLoading: authLoading, signInAnonymously } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
 
-  // Auto-authenticate for development
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      console.log('🔐 Auto-authenticating dashboard for development...');
-      signInAnonymously();
-    }
-  }, [authLoading, isAuthenticated, signInAnonymously]);
+  // Dashboard should be publicly viewable for TV displays
+  // Authentication is only required for admin functions
   
   // Handle new sales with enhanced audio playback and celebration for 24/7 operation
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
