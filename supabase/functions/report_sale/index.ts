@@ -4,130 +4,151 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+interface RequestBody {
+  sellerName: string;
+  tb: number;
+  salesCount?: number;
+}
+
 Deno.serve(async (req) => {
-  console.log('🌟 Report sale function started, method:', req.method);
+  console.log('🌟 Report sale function called:', req.method);
   
+  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { seller_id, tb_amount, id_units } = await req.json();
-    
-    console.log('📝 Report sale request:', { seller_id, tb_amount, id_units });
+    // Parse request body
+    const body: RequestBody = await req.json();
+    console.log('📥 Request body:', body);
+
+    const { sellerName, tb, salesCount } = body;
 
     // Validation
-    if (!seller_id) {
-      console.log('❌ Validation failed: missing seller_id');
-      return new Response(JSON.stringify({ error: "seller_id krävs" }), { 
+    if (!sellerName || typeof sellerName !== 'string' || sellerName.trim() === '') {
+      console.log('❌ Invalid seller name');
+      return new Response(JSON.stringify({ 
+        error: "sellerName måste vara en icke-tom sträng" 
+      }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Check that at least one value is provided and > 0
-    if (!(tb_amount > 0) && !(id_units > 0)) {
-      console.log('❌ Validation failed: no valid amounts');
-      return new Response(JSON.stringify({ error: "Ange TB-belopp och/eller ID-skydd (> 0)" }), { 
+    if (!tb || typeof tb !== 'number' || tb <= 0) {
+      console.log('❌ Invalid TB amount');
+      return new Response(JSON.stringify({ 
+        error: "tb måste vara ett tal större än 0" 
+      }), { 
         status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (salesCount !== undefined && (typeof salesCount !== 'number' || salesCount <= 0)) {
+      console.log('❌ Invalid sales count');
+      return new Response(JSON.stringify({ 
+        error: "salesCount måste vara ett tal större än 0 om angivet" 
+      }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get environment variables
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('❌ Missing environment variables');
+      return new Response(JSON.stringify({ 
+        error: "Server configuration error" 
+      }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     console.log('🔑 Creating Supabase client...');
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('❌ Missing environment variables:', { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
-      return new Response(JSON.stringify({ error: "Server configuration error" }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Validate seller exists
-    console.log('👤 Validating seller exists:', seller_id);
-    const { data: seller, error: sellerError } = await supabase
+    // Find or create seller
+    console.log('👤 Looking for seller:', sellerName);
+    let { data: seller, error: sellerError } = await supabase
       .from('sellers')
-      .select('id, name')
-      .eq('id', seller_id)
+      .select('id')
+      .eq('name', sellerName.trim())
       .single();
 
+    let sellerId = null;
+    
     if (sellerError || !seller) {
-      console.error('❌ Seller validation failed:', sellerError);
-      return new Response(JSON.stringify({ error: "Säljare kunde inte hittas" }), { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
-    console.log('✅ Seller validated:', seller.name);
-
-    // Determine service type and values
-    let serviceType = 'sstnet';
-    let mainAmount = 0;
-    let isIdSkydd = false;
-
-    if (id_units > 0 && tb_amount > 0) {
-      serviceType = 'combined';
-      mainAmount = tb_amount;
-      isIdSkydd = true;
-    } else if (id_units > 0) {
-      serviceType = 'id_bevakarna';
-      mainAmount = 0;
-      isIdSkydd = true;
+      console.log('➕ Creating new seller:', sellerName);
+      const { data: newSeller, error: createError } = await supabase
+        .from('sellers')
+        .insert([{ name: sellerName.trim() }])
+        .select('id')
+        .single();
+      
+      if (createError) {
+        console.error('❌ Failed to create seller:', createError);
+        return new Response(JSON.stringify({ 
+          error: "Kunde inte skapa säljare" 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      sellerId = newSeller.id;
     } else {
-      serviceType = 'sstnet';
-      mainAmount = tb_amount;
-      isIdSkydd = false;
+      sellerId = seller.id;
     }
 
-    const { data, error } = await supabase
-      .from("sales")
-      .insert([{ 
-        seller_id, 
-        seller_name: seller.name,
-        amount: mainAmount,
-        tb_amount: tb_amount || null, 
-        units: id_units || null,  // Changed from id_units to units
-        is_id_skydd: isIdSkydd,
-        service_type: serviceType
-      }])
+    // Insert sale
+    console.log('💾 Inserting sale...');
+    const saleData = {
+      seller_name: sellerName.trim(),
+      amount_tb: tb,
+      sales_count: salesCount || null,
+      seller_id: sellerId,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('📊 Sale data:', saleData);
+
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .insert([saleData])
       .select()
       .single();
 
-    console.log('💾 Inserting sale with data:', {
-      seller_id,
-      seller_name: seller.name,
-      amount: mainAmount,
-      tb_amount: tb_amount || null,
-      units: id_units || null,
-      is_id_skydd: isIdSkydd,
-      service_type: serviceType
-    });
-
-    if (error) {
-      console.error('❌ Sale insert failed:', error);
-      return new Response(JSON.stringify({ error: error.message }), {
+    if (saleError) {
+      console.error('❌ Failed to insert sale:', saleError);
+      return new Response(JSON.stringify({ 
+        error: "Kunde inte spara försäljning: " + saleError.message 
+      }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    console.log('✅ Sale created successfully:', data);
+    console.log('✅ Sale created successfully:', sale);
 
-    return new Response(JSON.stringify(data), {
-      status: 200,
+    return new Response(JSON.stringify(sale), {
+      status: 201,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error('❌ Report sale error:', e);
-    return new Response(JSON.stringify({ error: String(e?.message ?? e) }), { 
+
+  } catch (error) {
+    console.error('❌ Unexpected error:', error);
+    return new Response(JSON.stringify({ 
+      error: "Oväntat serverfel: " + String(error) 
+    }), { 
       status: 500, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

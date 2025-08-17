@@ -3,265 +3,84 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { User, DollarSign, CheckCircle, X, Shield } from 'lucide-react';
+import { User, DollarSign, Trophy } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useImageCache } from '@/hooks/useImageCache';
-import { useAudioManager } from '@/hooks/useAudioManager';
-import { CelebrationOverlay } from '@/components/CelebrationOverlay';
-
-interface Seller {
-  id: string;
-  name: string;
-  profile_image_url?: string;
-  sound_file_url?: string;
-  monthly_goal: number;
-}
-
-interface Sale {
-  id: string;
-  seller_name: string;
-  seller_id?: string;
-  amount: number;
-  tb_amount: number;
-  units: number;
-  service_type: string;
-  timestamp: string;
-  is_id_skydd?: boolean;
-  created_at: string;
-}
 
 const Seller = () => {
-  const [sellers, setSellers] = useState<Seller[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [todaysSales, setTodaysSales] = useState<Sale[]>([]);
-  const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
-  const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
-  const { toast } = useToast();
-
-  // Local storage for remembering seller name
-  const [rememberedName, setRememberedName] = useState(() => {
-    return localStorage.getItem('seller-name') || '';
-  });
-
-  const [reportType, setReportType] = useState<'tb-only' | 'tb-sales'>('tb-only');
-  const [sellerName, setSellerName] = useState(rememberedName);
+  const [sellerName, setSellerName] = useState('');
   const [tb, setTb] = useState('');
   const [salesCount, setSalesCount] = useState('');
-  
-  // Audio and image optimization hooks
-  const { preloadImages, getCachedImage } = useImageCache();
-  const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
+  const [isElClasico, setIsElClasico] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [todaysSales, setTodaysSales] = useState<any[]>([]);
+  const { toast } = useToast();
 
-  // Save seller name to localStorage when it changes
+  // Load remembered seller name
+  useEffect(() => {
+    const remembered = localStorage.getItem('seller-name');
+    if (remembered) {
+      setSellerName(remembered);
+    }
+  }, []);
+
+  // Save seller name to localStorage
   useEffect(() => {
     if (sellerName.trim()) {
       localStorage.setItem('seller-name', sellerName.trim());
     }
   }, [sellerName]);
 
-  // Helper functions
-  const formatCurrency = (amount: number) => {
-    return `${amount.toLocaleString('sv-SE')} tb`;
-  };
-
-  const isCurrentMonth = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-  };
-
-  // Load all sellers (public access)
-  const loadSellers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('sellers')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      setSellers(data || []);
-      
-      // Preload images and sounds
-      if (data) {
-        const imageUrls = data.filter(s => s.profile_image_url).map(s => s.profile_image_url!);
-        
-        preloadImages(imageUrls);
-        preloadSellerSounds(data.filter(s => s.sound_file_url));
-      }
-    } catch (error) {
-      console.error('❌ Error loading sellers:', error);
-    }
-  };
-
-  // Load today's sales (public access)
+  // Load today's sales
   const loadTodaysSales = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('sales')
         .select('*')
-        .gte('created_at', `${today}T00:00:00.000Z`)
-        .order('created_at', { ascending: false });
+        .gte('timestamp', `${today}T00:00:00.000Z`)
+        .order('timestamp', { ascending: false });
 
       if (error) throw error;
       setTodaysSales(data || []);
     } catch (error) {
-      console.error('❌ Error loading today\'s sales:', error);
+      console.error('Error loading sales:', error);
     }
   };
 
-  // Handle celebration with audio sync
-  const handleNewSale = async (sale: Sale, seller?: Seller) => {
-    console.log('🎆 Celebration triggered for sale:', sale);
-    
-    try {
-      await ensureAudioContextReady();
-      
-      setCelebrationSale(sale);
-      
-      if (seller?.sound_file_url) {
-        const audioResult = await playSellerSound(seller.sound_file_url);
-        const duration = audioResult?.duration;
-        setCelebrationAudioDuration(duration);
-        
-        // Hide celebration when audio ends
-        if (duration) {
-          setTimeout(() => {
-            setCelebrationSale(null);
-            setCelebrationAudioDuration(undefined);
-          }, duration * 1000);
-        }
-      } else {
-        // Default duration if no sound
-        setTimeout(() => {
-          setCelebrationSale(null);
-          setCelebrationAudioDuration(undefined);
-        }, 3000);
-      }
-    } catch (error) {
-      console.error('❌ Error handling celebration:', error);
-      // Still show celebration even if audio fails
-      setCelebrationSale(sale);
-      setTimeout(() => {
-        setCelebrationSale(null);
-        setCelebrationAudioDuration(undefined);
-      }, 3000);
-    }
-  };
-
-  // Initialize
   useEffect(() => {
-    loadSellers();
     loadTodaysSales();
-    initializeAudio();
-  }, []);
 
-  // Realtime updates
-  useEffect(() => {
+    // Subscribe to realtime changes
     const channel = supabase
-      .channel('seller-realtime')
+      .channel('sales-realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'sales' },
-        (payload) => {
-          console.log('🔄 New sale detected:', payload.new);
-          const newSale = payload.new as Sale;
-          const seller = sellers.find(s => s.id === newSale.seller_id);
-          
-          // Trigger celebration
-          handleNewSale(newSale, seller);
-          
-          // Refresh sales list
-          loadTodaysSales();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'sales' },
-        () => {
-          console.log('🔄 Sale deleted - refreshing');
-          loadTodaysSales();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sellers' },
-        () => {
-          console.log('🔄 Sellers updated - refreshing');
-          loadSellers();
-        }
+        { event: '*', schema: 'public', table: 'sales' },
+        () => loadTodaysSales()
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sellers]);
+  }, []);
 
-  // Delete sale via edge function
-  const handleDeleteSale = async (saleId: string) => {
-    try {
-      const { data: result, error } = await supabase.functions.invoke('sales-operations', {
-        body: { action: 'delete_sale', sale_id: saleId }
-      });
-
-      if (error) throw error;
-      if (result.error) throw new Error(result.error);
-
-      toast({
-        title: "Försäljning borttagen! 🗑️",
-        description: "Försäljningen har tagits bort från denna månad.",
-      });
-
-    } catch (error: any) {
-      console.error('❌ Error deleting sale:', error);
-      toast({
-        title: "Fel",
-        description: error.message || "Kunde inte ta bort försäljningen",
-        variant: "destructive"
-      });
-    }
-  };
-
-
-  // Updated submit handler for simplified form
-  const handleSubmitSale = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!sellerName.trim()) {
       toast({
         title: "Fyll i ditt namn",
-        description: "Ditt namn måste anges för att rapportera försäljning.",
+        description: "Ditt namn måste anges.",
         variant: "destructive"
       });
       return;
     }
 
-    const hasTB = tb.trim() !== '';
-    const hasSalesCount = salesCount.trim() !== '';
-
-    if (!hasTB) {
-      toast({
-        title: "Fyll i TB-belopp",
-        description: "TB-belopp måste anges.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (reportType === 'tb-sales' && !hasSalesCount) {
-      toast({
-        title: "Fyll i antal sälj",
-        description: "Antal sälj måste anges för El Clásico-rapportering.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const numericTB = parseFloat(tb);
-    if (isNaN(numericTB) || numericTB <= 0) {
+    const tbNumber = parseFloat(tb);
+    if (isNaN(tbNumber) || tbNumber <= 0) {
       toast({
         title: "Ogiltigt TB-belopp",
         description: "Ange ett giltigt TB-belopp större än 0.",
@@ -270,13 +89,13 @@ const Seller = () => {
       return;
     }
 
-    let numericSalesCount = 0;
-    if (reportType === 'tb-sales') {
-      numericSalesCount = parseInt(salesCount);
-      if (isNaN(numericSalesCount) || numericSalesCount <= 0) {
+    let salesNumber = undefined;
+    if (isElClasico) {
+      salesNumber = parseInt(salesCount);
+      if (isNaN(salesNumber) || salesNumber <= 0) {
         toast({
           title: "Ogiltigt antal sälj",
-          description: "Ange ett giltigt antal sälj större än 0.",
+          description: "Ange ett giltigt antal sälj för El Clásico.",
           variant: "destructive"
         });
         return;
@@ -286,52 +105,30 @@ const Seller = () => {
     setIsSubmitting(true);
 
     try {
-      // Find or create seller by name
-      let sellerId = '';
-      const existingSeller = sellers.find(s => s.name.toLowerCase() === sellerName.trim().toLowerCase());
-      
-      if (existingSeller) {
-        sellerId = existingSeller.id;
-      } else {
-        // Create new seller
-        const { data: newSeller, error: sellerError } = await supabase
-          .from('sellers')
-          .insert([{ name: sellerName.trim() }])
-          .select()
-          .single();
-
-        if (sellerError) throw sellerError;
-        sellerId = newSeller.id;
-      }
-
-      console.log('🚀 Calling report_sale with:', {
-        seller_id: sellerId,
-        tb_amount: numericTB,
-        id_units: reportType === 'tb-sales' ? numericSalesCount : undefined
+      console.log('🚀 Submitting sale:', {
+        sellerName: sellerName.trim(),
+        tb: tbNumber,
+        salesCount: salesNumber
       });
 
-      const { data: result, error } = await supabase.functions.invoke('report_sale', {
+      const { data, error } = await supabase.functions.invoke('report_sale', {
         body: {
-          seller_id: sellerId,
-          tb_amount: numericTB,
-          id_units: reportType === 'tb-sales' ? numericSalesCount : undefined
+          sellerName: sellerName.trim(),
+          tb: tbNumber,
+          salesCount: salesNumber
         }
       });
 
-      console.log('📥 Response from report_sale:', { result, error });
-
       if (error) {
-        console.error('Edge function error:', error);
+        console.error('Function error:', error);
         throw new Error(error.message || 'Kunde inte ansluta till servern');
       }
 
-      if (!result) {
-        throw new Error('Inget svar från servern');
-      }
+      console.log('✅ Sale reported successfully:', data);
 
-      let description = `${sellerName} rapporterade ${numericTB.toLocaleString('sv-SE')} tb`;
-      if (reportType === 'tb-sales') {
-        description += ` + ${numericSalesCount} sälj`;
+      let description = `${sellerName} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
+      if (isElClasico && salesNumber) {
+        description += ` + ${salesNumber} sälj (El Clásico)`;
       }
 
       toast({
@@ -342,6 +139,7 @@ const Seller = () => {
       // Reset form (keep seller name)
       setTb('');
       setSalesCount('');
+      setIsElClasico(false);
       
     } catch (error: any) {
       console.error('❌ Sale reporting failed:', error);
@@ -356,106 +154,82 @@ const Seller = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
-      {/* Celebration overlay */}
-      {celebrationSale && (
-        <CelebrationOverlay
-          sale={celebrationSale}
-          onComplete={() => {
-            setCelebrationSale(null);
-            setCelebrationAudioDuration(undefined);
-          }}
-          audioDuration={celebrationAudioDuration}
-          showBubble={true}
-          showConfetti={true}
-        />
-      )}
-
-      <div className="container mx-auto p-4 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
+      <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">Säljrapportering</h1>
-          <p className="text-gray-600">Rapportera dina försäljningar här</p>
+          <p className="text-gray-600">Rapportera dina försäljningar enkelt och snabbt</p>
         </div>
 
-        {/* Report Type Selection */}
-        <Card className="card-shadow border-0">
-          <CardHeader>
-            <CardTitle className="text-xl text-slate-700">Välj rapporteringstyp</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Button
-                variant={reportType === 'tb-only' ? 'default' : 'outline'}
-                onClick={() => setReportType('tb-only')}
-                className="h-16 flex flex-col items-center justify-center space-y-1"
-              >
-                <span className="font-semibold">Bara TB</span>
-                <span className="text-sm opacity-80">Rapportera endast TB-belopp</span>
-              </Button>
-              <Button
-                variant={reportType === 'tb-sales' ? 'default' : 'outline'}
-                onClick={() => setReportType('tb-sales')}
-                className="h-16 flex flex-col items-center justify-center space-y-1"
-              >
-                <span className="font-semibold">TB + El Clásico</span>
-                <span className="text-sm opacity-80">TB-belopp + antal sälj</span>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Reporting Form */}
-        <Card className="card-shadow border-0">
-          <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
+        {/* Main Form */}
+        <Card className="shadow-lg border-0">
+          <CardHeader className="bg-gradient-to-r from-blue-500 to-green-500 text-white">
             <CardTitle className="text-xl flex items-center gap-2">
-              <CheckCircle className="w-6 h-6" />
-              {reportType === 'tb-only' ? 'TB-rapportering' : 'TB + El Clásico-rapportering'}
+              <DollarSign className="w-6 h-6" />
+              Ny försäljning
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
-            <form onSubmit={handleSubmitSale} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="seller-name" className="text-sm font-medium flex items-center gap-2">
-                    <User className="w-4 h-4 text-green-600" />
-                    Ditt namn (kommer ihåg)
-                  </Label>
-                  <Input
-                    id="seller-name"
-                    type="text"
-                    placeholder="Ange ditt namn"
-                    value={sellerName}
-                    onChange={(e) => setSellerName(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Seller Name */}
+              <div className="space-y-2">
+                <Label htmlFor="seller-name" className="text-sm font-medium flex items-center gap-2">
+                  <User className="w-4 h-4 text-blue-600" />
+                  Ditt namn
+                </Label>
+                <Input
+                  id="seller-name"
+                  type="text"
+                  placeholder="Ange ditt namn"
+                  value={sellerName}
+                  onChange={(e) => setSellerName(e.target.value)}
+                  className="h-12"
+                  disabled={isSubmitting}
+                  required
+                />
+                <p className="text-xs text-gray-500">Ditt namn sparas för framtida rapporter</p>
+              </div>
+
+              {/* TB Amount */}
+              <div className="space-y-2">
+                <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-green-600" />
+                  TB-belopp
+                </Label>
+                <Input
+                  id="tb-amount"
+                  type="number"
+                  placeholder="ex. 15000"
+                  value={tb}
+                  onChange={(e) => setTb(e.target.value)}
+                  className="h-12"
+                  disabled={isSubmitting}
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+
+              {/* El Clasico Toggle */}
+              <div className="space-y-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="el-clasico"
+                    checked={isElClasico}
+                    onCheckedChange={setIsElClasico}
                     disabled={isSubmitting}
-                    required
                   />
+                  <Label htmlFor="el-clasico" className="text-sm font-medium flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-yellow-600" />
+                    El Clásico-tävlingen
+                  </Label>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-green-600" />
-                    TB-belopp (obligatoriskt)
-                  </Label>
-                  <Input
-                    id="tb-amount"
-                    type="number"
-                    placeholder="ex. 15000"
-                    value={tb}
-                    onChange={(e) => setTb(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                    disabled={isSubmitting}
-                    min="0"
-                    required
-                  />
-                </div>
-
-                {reportType === 'tb-sales' && (
+                {isElClasico && (
                   <div className="space-y-2">
-                    <Label htmlFor="sales-count" className="text-sm font-medium flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-green-600" />
-                      Antal sälj (El Clásico)
+                    <Label htmlFor="sales-count" className="text-sm font-medium">
+                      Antal sälj
                     </Label>
                     <Input
                       id="sales-count"
@@ -463,19 +237,23 @@ const Seller = () => {
                       placeholder="ex. 2"
                       value={salesCount}
                       onChange={(e) => setSalesCount(e.target.value)}
-                      className="smooth-transition focus:ring-primary/20 focus:border-primary"
+                      className="h-10"
                       disabled={isSubmitting}
-                      min="0"
-                      required
+                      min="1"
+                      required={isElClasico}
                     />
+                    <p className="text-xs text-yellow-700">
+                      Antal sälj för El Clásico-tävlingen (1 aug - 30 sep 2025)
+                    </p>
                   </div>
                 )}
               </div>
 
+              {/* Submit Button */}
               <Button
                 type="submit"
-                disabled={isSubmitting || !sellerName.trim() || !tb.trim() || (reportType === 'tb-sales' && !salesCount.trim())}
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
+                disabled={isSubmitting || !sellerName.trim() || !tb.trim() || (isElClasico && !salesCount.trim())}
+                className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold"
               >
                 {isSubmitting ? (
                   <div className="flex items-center gap-2">
@@ -483,56 +261,40 @@ const Seller = () => {
                     Rapporterar...
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5" />
-                    Rapportera försäljning
-                  </div>
+                  "Rapportera försäljning"
                 )}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        {/* 🧾 Dagens försäljningar */}
-        <Card className="card-shadow border-0 mt-8">
+        {/* Today's Sales */}
+        <Card className="shadow-lg border-0">
           <CardHeader>
-            <CardTitle className="text-xl text-slate-700 flex items-center gap-2">
-              🧾 Dagens försäljningar
+            <CardTitle className="text-xl text-gray-700">
+              📊 Dagens försäljningar
             </CardTitle>
           </CardHeader>
           <CardContent>
             {todaysSales.length === 0 ? (
               <p className="text-center text-gray-500 py-8">Inga försäljningar registrerade idag</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-64 overflow-y-auto">
                 {todaysSales.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${sale.is_id_skydd ? 'bg-green-500' : 'bg-blue-500'}`} />
-                      <div>
-                        <p className="font-semibold text-gray-900">{sale.seller_name}</p>
-                        <p className="text-sm text-gray-600">
-                          {sale.tb_amount ? `${sale.tb_amount.toLocaleString('sv-SE')} tb` : '0 tb'}
-                          {sale.units && sale.units > 0 && ` + ${sale.units} sälj`}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(sale.timestamp).toLocaleTimeString('sv-SE', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </p>
-                      </div>
+                  <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-semibold text-gray-900">{sale.seller_name}</p>
+                      <p className="text-sm text-gray-600">
+                        {sale.amount_tb.toLocaleString('sv-SE')} tb
+                        {sale.sales_count && ` + ${sale.sales_count} sälj`}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(sale.timestamp).toLocaleTimeString('sv-SE', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </p>
                     </div>
-                    {isCurrentMonth(sale.created_at) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteSale(sale.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
                   </div>
                 ))}
               </div>

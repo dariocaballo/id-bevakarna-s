@@ -1,25 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { useAudioManager } from '@/hooks/useAudioManager';
 import { useImageCache } from '@/hooks/useImageCache';
-import { useAuth } from '@/hooks/useAuth';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
-import { Trophy, Medal, Crown, X, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 
 interface Sale {
   id: string;
   seller_name: string;
-  seller_id?: string;
-  amount: number;
-  tb_amount?: number;
-  units?: number;
+  amount_tb: number;
+  sales_count?: number;
   timestamp: string;
-  service_type?: string;
-  is_id_skydd?: boolean;
+  seller_id?: string;
 }
 
 interface Seller {
@@ -27,76 +19,49 @@ interface Seller {
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
-  monthly_goal: number;
 }
 
 const Dashboard = () => {
   const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
 
-  // Dashboard should be publicly viewable for TV displays
-  // Authentication is only required for admin functions
-  
-  // Handle new sales with enhanced audio playback and celebration for 24/7 operation
+  // Handle new sales with enhanced audio playback and celebration
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
-    console.log('🎆🎆🎆 DASHBOARD CELEBRATION TRIGGERED! 🎆🎆🎆');
-    console.log('🎯 Ny försäljning:', `seller_id=${sale.seller_id}, tb=${sale.tb_amount || sale.amount}, is_id_skydd=${sale.service_type}`);
-    console.log('📊 Sale details:', {
-      id: sale.id,
-      seller_name: sale.seller_name,
-      seller_id: sale.seller_id,
-      amount: sale.amount,
-      tb_amount: sale.tb_amount,
-      units: sale.units,
-      service_type: sale.service_type,
-      timestamp: sale.timestamp
-    });
-    console.log('👤 Seller details:', seller);
+    console.log('🎆 DASHBOARD CELEBRATION TRIGGERED!');
+    console.log('🎯 Ny försäljning:', `seller=${sale.seller_name}, tb=${sale.amount_tb}`);
     
-    // Ensure audio is ready for 24/7 operation
     await ensureAudioContextReady();
     
-    // Play seller sound and get duration for celebration sync
     try {
       console.log('🎵 Attempting to play seller sound...');
-      if (seller?.sound_file_url) {
-        console.log(`🎵 Spelar: ${seller.sound_file_url} för ${seller.name}`);
-      }
       
       const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
       
       if (audioResult.played) {
-        // Set celebration duration to match audio duration (convert to milliseconds)
         const durationMs = audioResult.duration ? audioResult.duration * 1000 : 3000;
-        console.log('🎵 Audio played successfully, duration:', audioResult.duration, 'seconds =', durationMs, 'ms');
-        console.log('🎉 Celebration start');
+        console.log('🎵 Audio played successfully, duration:', audioResult.duration, 'seconds');
         setCelebrationAudioDuration(durationMs);
       } else {
-        // Use default duration if no audio
         console.log('🎵 No custom audio, using default duration');
         setCelebrationAudioDuration(3000);
       }
     } catch (error) {
       console.error('❌ Error playing sound:', error);
-      setCelebrationAudioDuration(3000); // Default duration on error
+      setCelebrationAudioDuration(3000);
     }
     
-    // Trigger celebration overlay
     console.log('🎆 Setting celebration sale - overlay should appear now!');
     setCelebrationSale(sale);
   }, [playSellerSound, ensureAudioContextReady]);
 
-  // Enhanced seller updates with live audio reloading for 24/7 operation
+  // Enhanced seller updates with live audio reloading
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
-    console.log('🔄 Enhanced seller update - reloading audio files for TV operation...');
-    console.log('👤 Seller uppdaterad: reloading audio/images');
-    await ensureAudioContextReady(); // Ensure audio is ready before reloading
-    await preloadSellerSounds(updatedSellers); // Will automatically handle URL changes
+    console.log('🔄 Enhanced seller update - reloading audio files...');
+    await ensureAudioContextReady();
+    await preloadSellerSounds(updatedSellers);
     
-    // Preload updated seller images
     const imageUrls = updatedSellers
       .map(seller => seller.profile_image_url)
       .filter(url => url) as string[];
@@ -105,10 +70,10 @@ const Dashboard = () => {
       preloadImages(imageUrls);
     }
     
-    console.log('✅ Enhanced seller audio update complete - live refetch/mapping klar');
+    console.log('✅ Enhanced seller audio update complete');
   }, [preloadSellerSounds, ensureAudioContextReady, preloadImages]);
 
-  // Use enhanced realtime data hook with TV-optimized settings - ONLY on dashboard
+  // Use realtime data hook with TV-optimized settings
   const {
     totalToday,
     totalMonth,
@@ -116,112 +81,19 @@ const Dashboard = () => {
     todaysSellers,
     lastSale,
     sellers,
-    activeChallenges,
     settings,
     isLoading
   } = useRealtimeData({
-    onNewSale: handleNewSale, // Only trigger audio/celebration on dashboard
+    onNewSale: handleNewSale,
     onSellerUpdate: handleSellerUpdate,
     enableAutoRefresh: true,
-    refreshInterval: 10000 // More frequent updates for TV display (10 seconds)
+    refreshInterval: 10000
   });
 
-  // State for El Clásico competition data
-  const [idSales, setIdSales] = useState<Sale[]>([]);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
-  
-  // Load El Clásico data
-  useEffect(() => {
-    const fetchIdSales = async () => {
-      try {
-        const now = new Date();
-        const august1 = new Date(2025, 7, 1); // August 1, 2025
-        const september30 = new Date(2025, 8, 30, 23, 59, 59); // September 30, 2025
-        
-        // Only fetch if we're in the competition period
-        if (now < august1 || now > september30) {
-          setIdSales([]);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('sales')
-          .select('*')
-          .or('service_type.eq.id_bevakarna,service_type.eq.combined')
-          .gte('timestamp', august1.toISOString())
-          .lte('timestamp', september30.toISOString());
-        
-        if (error) throw error;
-        setIdSales(data || []);
-      } catch (error) {
-        console.error('Error loading El Clásico data:', error);
-      }
-    };
-    
-    fetchIdSales();
-
-    // Subscribe to realtime updates for El Clásico data
-    const channel = supabase
-      .channel('el-clasico-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
-        () => {
-          fetchIdSales(); // Reload El Clásico data on any sales change
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  // Calculate El Clásico competition data (ID-skydd count per seller using units)
-  const elClasicoData = useMemo(() => {
-    // Calculate ID-skydd count per seller using the units field
-    const sellerIdCounts: { [key: string]: number } = {};
-    idSales.forEach(sale => {
-      // Count units for id_bevakarna and combined sales
-      if (sale.service_type === 'id_bevakarna' || sale.service_type === 'combined') {
-        sellerIdCounts[sale.seller_name] = (sellerIdCounts[sale.seller_name] || 0) + (sale.units || 0);
-      }
-    });
-
-    // Create array with seller data
-    return sellers.map(seller => {
-      const idCount = sellerIdCounts[seller.name] || 0;
-      return {
-        name: seller.name,
-        idCount,
-        imageUrl: seller.profile_image_url,
-        status: idCount >= 86 ? 'green' : idCount >= 65 ? 'yellow' : 'blue'
-      };
-    }).sort((a, b) => b.idCount - a.idCount);
-  }, [sellers, idSales]);
-
-  const handleDeleteSale = async (saleId: string, isToday: boolean) => {
-    try {
-      const { data: result, error } = await supabase.functions.invoke('sales-operations', {
-        body: { action: 'delete_sale', sale_id: saleId }
-      });
-
-      if (error) throw error;
-      if (result.error) throw new Error(result.error);
-
-      // The realtime subscription will automatically update the data
-      setShowDeleteConfirm(null);
-      
-    } catch (error: any) {
-      console.error('Error deleting sale:', error);
-    }
-  };
-
-  // Enhanced initialization for 24/7 TV operation
+  // Initialize audio and preload assets
   useEffect(() => {
     if (sellers.length === 0) return;
     
-    // Enhanced audio initialization for TV displays
     const handleUserInteraction = async () => {
       await initializeAudio();
       await ensureAudioContextReady();
@@ -231,19 +103,14 @@ const Dashboard = () => {
       document.removeEventListener('focus', handleUserInteraction);
     };
     
-    // Multiple event listeners for better TV compatibility
     document.addEventListener('click', handleUserInteraction);
     document.addEventListener('keydown', handleUserInteraction);
     document.addEventListener('touchstart', handleUserInteraction);
     document.addEventListener('focus', handleUserInteraction);
     
-    // Immediate initialization attempt (for auto-started systems)
     initializeAudio();
-    
-    // Preload seller sounds
     preloadSellerSounds(sellers);
     
-    // Preload seller images
     const imageUrls = sellers
       .map(seller => seller.profile_image_url)
       .filter(url => url) as string[];
@@ -278,7 +145,6 @@ const Dashboard = () => {
         alt={seller.name}
         className={`${size} object-cover rounded-full`}
         onError={(e) => {
-          // Hide broken image and show fallback
           e.currentTarget.style.display = 'none';
           const fallback = e.currentTarget.nextElementSibling as HTMLElement;
           if (fallback) {
@@ -312,10 +178,21 @@ const Dashboard = () => {
     return sellers.find(s => s.id === sale.seller_id);
   };
 
+  if (isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-blue-600">Laddar dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen overflow-hidden p-3 bg-gradient-to-br from-blue-50 to-blue-100">
       <div className="max-w-7xl mx-auto h-full flex flex-col">
-        {/* Header - Kompakt enligt spec */}
+        {/* Header */}
         <div className="text-center mb-3 flex-shrink-0">
           <h1 className="text-3xl font-bold mb-1 text-blue-800">ID-Bevakarna</h1>
           <h2 className="text-lg font-semibold text-blue-600">Sales Dashboard</h2>
@@ -326,7 +203,7 @@ const Dashboard = () => {
           sale={celebrationSale}
           sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
           onComplete={() => {
-            console.log('✅ Celebration end (onended)');
+            console.log('✅ Celebration end');
             setCelebrationSale(null);
             setCelebrationAudioDuration(undefined);
           }}
@@ -335,10 +212,10 @@ const Dashboard = () => {
           audioDuration={celebrationAudioDuration}
         />
 
-        {/* Layout enligt specifikation */}
+        {/* Layout */}
         <div className="flex-1 flex flex-col gap-3 overflow-hidden">
           
-          {/* Totalt TB (dag + månad) */}
+          {/* Total TB (day + month) */}
           <div className="flex gap-3 h-24">
             <Card className="flex-1 shadow-md border-0 bg-white">
               <CardContent className="p-4">
@@ -354,7 +231,7 @@ const Dashboard = () => {
             </Card>
           </div>
 
-          {/* 🔵 Dagens försäljning per säljare (cirklar) */}
+          {/* Today's sales per seller (circles) */}
           <Card className="shadow-md border-0 bg-white flex-shrink-0" style={{height: '180px'}}>
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
@@ -365,7 +242,7 @@ const Dashboard = () => {
               <div className="flex justify-center gap-6 flex-wrap">
                 {todaysSellers.slice(0, 6).map((seller, index) => (
                   <div key={seller.name} className="flex flex-col items-center space-y-1">
-                    {/* Stor cirkel med profilbild */}
+                    {/* Large circle with profile image */}
                     <div className="relative">
                       <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-blue-300 shadow-lg">
                         {seller.imageUrl ? (
@@ -374,12 +251,12 @@ const Dashboard = () => {
                           <span className="text-lg font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
                         )}
                       </div>
-                      {/* Medalj */}
+                      {/* Medal */}
                       <div className="absolute -top-1 -right-1 text-lg">
                         {getMedalIcon(index)}
                       </div>
                     </div>
-                    {/* Namn + Dagens TB */}
+                    {/* Name + Today's TB */}
                     <div className="text-center">
                       <p className="font-bold text-slate-800 text-xs leading-tight">{seller.name}</p>
                       <p className="text-sm font-bold text-blue-700 leading-tight">{formatCurrency(seller.amount)}</p>
@@ -390,9 +267,9 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Nedre rad: Månadens toppsäljare & El Clásico */}
+          {/* Bottom row: Monthly top sellers & Last sale */}
           <div className="flex gap-3 flex-1 min-h-0">
-            {/* 🥇 Månadens toppsäljare */}
+            {/* Monthly top sellers */}
             <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
@@ -401,7 +278,7 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent className="overflow-y-auto">
                 <div className="space-y-2">
-                  {topSellers.slice(0, 4).map((seller, index) => (
+                  {topSellers.slice(0, 5).map((seller, index) => (
                     <div key={seller.name} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-slate-600">{index + 1}.</span>
@@ -414,96 +291,45 @@ const Dashboard = () => {
               </CardContent>
             </Card>
 
-            {/* 🏆 El Clásico */}
+            {/* Last sale */}
             <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base text-slate-700 font-bold flex items-center justify-between">
-                  <span className="flex items-center gap-2">🏆 El Clásico</span>
-                  {(todaysSellers.length > 0 || topSellers.length > 0) && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowDeleteConfirm(showDeleteConfirm ? null : 'dashboard')}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
+                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                  🎯 Senaste försäljning
                 </CardTitle>
               </CardHeader>
-              <CardContent className="overflow-y-auto">
-                <div className="space-y-2">
-                  {elClasicoData.slice(0, 4).map((seller) => (
-                    <div key={seller.name} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800 text-sm">{seller.name}</span>
-                        {seller.status === 'green' && <Trophy className="w-4 h-4 text-yellow-500" />}
+              <CardContent>
+                {lastSale ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                        <span className="text-sm font-bold text-green-700">
+                          {lastSale.seller_name.charAt(0).toUpperCase()}
+                        </span>
                       </div>
-                      <span className={`font-bold text-sm ${
-                        seller.status === 'green' ? 'text-green-600' : 
-                        seller.status === 'yellow' ? 'text-yellow-600' : 
-                        'text-blue-600'
-                      }`}>
-                        {seller.idCount} / 86
-                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-800 text-sm">{lastSale.seller_name}</p>
+                        <p className="text-xs text-slate-600">
+                          {new Date(lastSale.timestamp).toLocaleTimeString('sv-SE', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                
-                {/* Delete confirmation panel */}
-                {showDeleteConfirm === 'dashboard' && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <h4 className="text-sm font-semibold text-red-800 mb-2">Ta bort försäljningar</h4>
-                    <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {[...totalToday > 0 ? todaysSellers : [], ...totalMonth > 0 ? topSellers : []].slice(0, 10).map((seller, index) => (
-                        <div key={`${seller.name}-${index}`} className="flex items-center justify-between text-xs">
-                          <span className="text-slate-700">{seller.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteSale(seller.name, true)}
-                            className="text-red-600 hover:text-red-700 h-6 px-2"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      ))}
+                    <div className="text-center py-2">
+                      <p className="text-2xl font-bold text-green-700">{formatCurrency(lastSale.amount_tb)}</p>
+                      {lastSale.sales_count && (
+                        <p className="text-sm text-yellow-600">+ {lastSale.sales_count} sälj (El Clásico)</p>
+                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowDeleteConfirm(null)}
-                      className="mt-2 w-full text-slate-600"
-                    >
-                      Stäng
-                    </Button>
                   </div>
+                ) : (
+                  <p className="text-center text-slate-500 py-8">Ingen försäljning idag</p>
                 )}
               </CardContent>
             </Card>
           </div>
-
-          {/* 🧩 Utmaning / Kung / Mål (om aktivt) */}
-          {activeChallenges.length > 0 && (
-            <Card className="shadow-md border-0 bg-white flex-shrink-0" style={{height: '100px'}}>
-              <CardHeader className="pb-1">
-                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
-                  🧩 Utmaning / Kung / Mål
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-4">
-                  {activeChallenges.slice(0, 2).map((challenge) => (
-                    <div key={challenge.id} className="flex-1 p-2 rounded bg-yellow-50 border border-yellow-200">
-                      <h4 className="text-sm font-bold text-slate-800">{challenge.title}</h4>
-                      <p className="text-xs text-slate-600 mt-1">{challenge.description}</p>
-                      <p className="text-sm font-bold text-blue-700 mt-1">Mål: {formatCurrency(challenge.target_amount)}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>

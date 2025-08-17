@@ -14,93 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      daily_challenges: {
-        Row: {
-          created_at: string
-          description: string
-          id: string
-          is_active: boolean | null
-          target_amount: number
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          description: string
-          id?: string
-          is_active?: boolean | null
-          target_amount: number
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          description?: string
-          id?: string
-          is_active?: boolean | null
-          target_amount?: number
-          title?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      dashboard_layouts: {
-        Row: {
-          created_at: string
-          custom_elements: Json
-          id: string
-          is_active: boolean
-          layout_config: Json
-          layout_name: string
-          theme_config: Json
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          custom_elements?: Json
-          id?: string
-          is_active?: boolean
-          layout_config?: Json
-          layout_name?: string
-          theme_config?: Json
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          custom_elements?: Json
-          id?: string
-          is_active?: boolean
-          layout_config?: Json
-          layout_name?: string
-          theme_config?: Json
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      dashboard_settings: {
-        Row: {
-          created_at: string
-          id: string
-          setting_key: string
-          setting_value: Json
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          setting_key: string
-          setting_value: Json
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          setting_key?: string
-          setting_value?: Json
-          updated_at?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           created_at: string
@@ -130,43 +43,31 @@ export type Database = {
       }
       sales: {
         Row: {
-          amount: number
+          amount_tb: number
           created_at: string
           id: string
-          is_id_skydd: boolean | null
+          sales_count: number | null
           seller_id: string | null
           seller_name: string
-          service_type: string | null
-          tb_amount: number | null
           timestamp: string
-          units: number | null
-          updated_at: string
         }
         Insert: {
-          amount: number
+          amount_tb: number
           created_at?: string
           id?: string
-          is_id_skydd?: boolean | null
+          sales_count?: number | null
           seller_id?: string | null
           seller_name: string
-          service_type?: string | null
-          tb_amount?: number | null
           timestamp?: string
-          units?: number | null
-          updated_at?: string
         }
         Update: {
-          amount?: number
+          amount_tb?: number
           created_at?: string
           id?: string
-          is_id_skydd?: boolean | null
+          sales_count?: number | null
           seller_id?: string | null
           seller_name?: string
-          service_type?: string | null
-          tb_amount?: number | null
           timestamp?: string
-          units?: number | null
-          updated_at?: string
         }
         Relationships: [
           {
@@ -182,32 +83,26 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          monthly_goal: number | null
           name: string
           profile_image_url: string | null
           sound_file_url: string | null
           updated_at: string
-          user_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
-          monthly_goal?: number | null
           name: string
           profile_image_url?: string | null
           sound_file_url?: string | null
           updated_at?: string
-          user_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
-          monthly_goal?: number | null
           name?: string
           profile_image_url?: string | null
           sound_file_url?: string | null
           updated_at?: string
-          user_id?: string | null
         }
         Relationships: []
       }

@@ -13,9 +13,6 @@ interface Seller {
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
-  monthly_goal: number;
-  created_at: string;
-  updated_at: string;
 }
 
 const Admin = () => {
@@ -28,15 +25,26 @@ const Admin = () => {
     if (password === 'admin123') {
       setIsAuthenticated(true);
       toast({
-        title: "Framgång",
-        description: "Inloggad som administratör"
+        title: "Inloggad",
+        description: "Välkommen till admin-panelen"
       });
     } else {
       toast({
-        title: "Fel",
-        description: "Fel lösenord",
+        title: "Fel lösenord",
+        description: "Försök igen",
         variant: "destructive"
       });
+    }
+  };
+
+  const loadSellers = async () => {
+    try {
+      const { data, error } = await supabase.from('sellers').select('*').order('name');
+      if (error) throw error;
+      setSellers(data || []);
+    } catch (error) {
+      console.error('Error loading sellers:', error);
+      toast({ title: "Fel", description: "Kunde inte ladda säljare", variant: "destructive" });
     }
   };
 
@@ -45,17 +53,6 @@ const Admin = () => {
       loadSellers();
     }
   }, [isAuthenticated]);
-
-  const loadSellers = async () => {
-    try {
-      const { data, error } = await supabase.from('sellers').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      setSellers(data || []);
-    } catch (error) {
-      console.error('Error loading sellers:', error);
-      toast({ title: "Fel", description: "Kunde inte ladda säljare", variant: "destructive" });
-    }
-  };
 
   const handleProfileImageUpload = async (sellerId: string, file: File) => {
     try {
@@ -145,7 +142,7 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-4">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="mb-6 text-center">
           <div className="flex justify-between items-center mb-4">
             <div className="flex-1"></div>
@@ -164,17 +161,14 @@ const Admin = () => {
           <p className="text-blue-600">Hantera profilbilder och ljudfiler</p>
         </div>
 
-        <Card>
+        <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Hantera säljare
+              Säljare - Profilbilder & Ljudfiler
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-4">
-              Endast profilbilder och ljudfiler kan hanteras här.
-            </p>
             <Table>
               <TableHeader>
                 <TableRow>
