@@ -2,3 +2,6 @@ project_id = "duoypfodaqaqsiixulkn"
 
 [functions.sales-operations]
 verify_jwt = false
+
+[functions.report_sale]
+verify_jwt = false

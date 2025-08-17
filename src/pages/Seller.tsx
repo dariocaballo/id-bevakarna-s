@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { User, DollarSign, CheckCircle, X, Shield, CreditCard } from 'lucide-react';
+import { User, DollarSign, CheckCircle, X, Shield } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useImageCache } from '@/hooks/useImageCache';
 import { useAudioManager } from '@/hooks/useAudioManager';
@@ -34,16 +34,10 @@ interface Sale {
 
 const Seller = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
-  const [selectedSellerIdTB, setSelectedSellerIdTB] = useState('');
-  const [selectedSellerIdSkydd, setSelectedSellerIdSkydd] = useState('');
-  const [selectedSellerIdCombined, setSelectedSellerIdCombined] = useState('');
+  const [selectedSellerId, setSelectedSellerId] = useState('');
   const [tbAmount, setTbAmount] = useState('');
   const [idUnits, setIdUnits] = useState('');
-  const [tbAmountCombined, setTbAmountCombined] = useState('');
-  const [idUnitsCombined, setIdUnitsCombined] = useState('');
-  const [isSubmittingTB, setIsSubmittingTB] = useState(false);
-  const [isSubmittingSkydd, setIsSubmittingSkydd] = useState(false);
-  const [isSubmittingCombined, setIsSubmittingCombined] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [todaysSales, setTodaysSales] = useState<Sale[]>([]);
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
@@ -67,7 +61,6 @@ const Seller = () => {
       // Preload images and sounds
       if (data) {
         const imageUrls = data.filter(s => s.profile_image_url).map(s => s.profile_image_url!);
-        const soundUrls = data.filter(s => s.sound_file_url).map(s => s.sound_file_url!);
         
         preloadImages(imageUrls);
         preloadSellerSounds(data.filter(s => s.sound_file_url));
@@ -207,141 +200,11 @@ const Seller = () => {
     }
   };
 
-  // Submit TB only
-  const handleSubmitTB = async (e: React.FormEvent) => {
+  // Submit sale via edge function
+  const handleSubmitSale = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedSellerIdTB || !tbAmount.trim()) {
-      toast({
-        title: "Fyll i alla fält",
-        description: "Både säljare och TB-belopp krävs.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const numericAmount = parseFloat(tbAmount.replace(/[^\d.,]/g, '').replace(',', '.'));
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      toast({
-        title: "Ogiltigt belopp",
-        description: "Ange ett giltigt TB-belopp.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSubmittingTB(true);
-
-    try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerIdTB);
-      
-      const { data: result, error } = await supabase.functions.invoke('sales-operations', {
-        body: {
-          action: 'create_sale',
-          seller_id: selectedSellerIdTB,
-          seller_name: selectedSeller?.name || '',
-          amount: 0,
-          tb_amount: numericAmount,
-          units: 0,
-          is_id_skydd: false,
-          service_type: 'sstnet'
-        }
-      });
-
-      if (error) throw error;
-      if (result.error) throw new Error(result.error);
-
-      toast({
-        title: "TB-försäljning rapporterad! 🎉",
-        description: `${selectedSeller?.name} sålde för ${numericAmount.toLocaleString('sv-SE')} TB`,
-      });
-
-      // Reset form
-      setTbAmount('');
-      setSelectedSellerIdTB('');
-      
-    } catch (error: any) {
-      console.error('❌ TB sale reporting failed:', error);
-      toast({
-        title: "Fel",
-        description: error.message || "Kunde inte registrera TB-försäljning",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmittingTB(false);
-    }
-  };
-
-  // Submit ID-skydd only
-  const handleSubmitIdSkydd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedSellerIdSkydd || !idUnits.trim()) {
-      toast({
-        title: "Fyll i alla fält",
-        description: "Både säljare och antal ID-skydd krävs.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const numericUnits = parseInt(idUnits);
-    if (isNaN(numericUnits) || numericUnits <= 0) {
-      toast({
-        title: "Ogiltigt antal",
-        description: "Ange ett giltigt antal ID-skydd.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSubmittingSkydd(true);
-
-    try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerIdSkydd);
-      
-      const { data: result, error } = await supabase.functions.invoke('sales-operations', {
-        body: {
-          action: 'create_sale',
-          seller_id: selectedSellerIdSkydd,
-          seller_name: selectedSeller?.name || '',
-          amount: 0,
-          tb_amount: 0,
-          units: numericUnits,
-          is_id_skydd: true,
-          service_type: 'id_bevakarna'
-        }
-      });
-
-      if (error) throw error;
-      if (result.error) throw new Error(result.error);
-
-      toast({
-        title: "ID-skydd rapporterat! 🎉",
-        description: `${selectedSeller?.name} sålde ${numericUnits} ID-skydd`,
-      });
-
-      // Reset form
-      setIdUnits('');
-      setSelectedSellerIdSkydd('');
-      
-    } catch (error: any) {
-      console.error('❌ ID-skydd reporting failed:', error);
-      toast({
-        title: "Fel",
-        description: error.message || "Kunde inte registrera ID-skydd",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmittingSkydd(false);
-    }
-  };
-
-  // Submit combined (ID-skydd + TB)
-  const handleSubmitCombined = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedSellerIdCombined) {
+    if (!selectedSellerId) {
       toast({
         title: "Välj säljare",
         description: "Du måste välja en säljare.",
@@ -350,8 +213,8 @@ const Seller = () => {
       return;
     }
 
-    const hasTB = tbAmountCombined.trim() !== '';
-    const hasUnits = idUnitsCombined.trim() !== '';
+    const hasTB = tbAmount.trim() !== '';
+    const hasUnits = idUnits.trim() !== '';
 
     if (!hasTB && !hasUnits) {
       toast({
@@ -366,11 +229,11 @@ const Seller = () => {
     let numericUnits = 0;
 
     if (hasTB) {
-      numericTB = parseFloat(tbAmountCombined.replace(/[^\d.,]/g, '').replace(',', '.'));
-      if (isNaN(numericTB) || numericTB < 0) {
+      numericTB = parseFloat(tbAmount.replace(/[^\d.,]/g, '').replace(',', '.'));
+      if (isNaN(numericTB) || numericTB <= 0) {
         toast({
           title: "Ogiltigt TB-belopp",
-          description: "Ange ett giltigt TB-belopp.",
+          description: "Ange ett giltigt TB-belopp större än 0.",
           variant: "destructive"
         });
         return;
@@ -378,38 +241,38 @@ const Seller = () => {
     }
 
     if (hasUnits) {
-      numericUnits = parseInt(idUnitsCombined);
-      if (isNaN(numericUnits) || numericUnits < 0) {
+      numericUnits = parseInt(idUnits);
+      if (isNaN(numericUnits) || numericUnits <= 0) {
         toast({
           title: "Ogiltigt antal ID-skydd",
-          description: "Ange ett giltigt antal ID-skydd.",
+          description: "Ange ett giltigt antal ID-skydd större än 0.",
           variant: "destructive"
         });
         return;
       }
     }
 
-    setIsSubmittingCombined(true);
+    setIsSubmitting(true);
 
     try {
-      const selectedSeller = sellers.find(s => s.id === selectedSellerIdCombined);
-      
-      const { data: result, error } = await supabase.functions.invoke('sales-operations', {
+      const { data: result, error } = await supabase.functions.invoke('report_sale', {
         body: {
-          action: 'create_sale',
-          seller_id: selectedSellerIdCombined,
-          seller_name: selectedSeller?.name || '',
-          amount: hasUnits ? numericTB : 0, // Use TB amount as main amount for ID-skydd sales
-          tb_amount: numericTB,
-          units: numericUnits,
-          is_id_skydd: hasUnits,
-          service_type: hasUnits ? 'combined' : 'sstnet'
+          seller_id: selectedSellerId,
+          tb_amount: hasTB ? numericTB : null,
+          id_units: hasUnits ? numericUnits : null
         }
       });
 
-      if (error) throw error;
-      if (result.error) throw new Error(result.error);
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error('Kunde inte ansluta till servern');
+      }
 
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const selectedSeller = sellers.find(s => s.id === selectedSellerId);
       let description = `${selectedSeller?.name} rapporterade`;
       if (hasTB && hasUnits) {
         description += ` ${numericTB.toLocaleString('sv-SE')} TB + ${numericUnits} ID-skydd`;
@@ -425,19 +288,19 @@ const Seller = () => {
       });
 
       // Reset form
-      setTbAmountCombined('');
-      setIdUnitsCombined('');
-      setSelectedSellerIdCombined('');
+      setTbAmount('');
+      setIdUnits('');
+      setSelectedSellerId('');
       
     } catch (error: any) {
-      console.error('❌ Combined sale reporting failed:', error);
+      console.error('❌ Sale reporting failed:', error);
       toast({
         title: "Fel",
         description: error.message || "Kunde inte registrera försäljning",
         variant: "destructive"
       });
     } finally {
-      setIsSubmittingCombined(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -475,23 +338,23 @@ const Seller = () => {
           <p className="text-gray-600">Registrera dina försäljningar här</p>
         </div>
 
-        {/* 💰 TB-endast rapportering */}
+        {/* ✅ Kombinerad rapportering */}
         <Card className="card-shadow border-0">
-          <CardHeader className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+          <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
             <CardTitle className="text-xl flex items-center gap-2">
-              <CreditCard className="w-6 h-6" />
-              💰 Rapportera TB-försäljning
+              <CheckCircle className="w-6 h-6" />
+              ✅ Kombinerad rapportering (ID-skydd + TB)
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
-            <form onSubmit={handleSubmitTB} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form onSubmit={handleSubmitSale} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="seller-tb" className="text-sm font-medium flex items-center gap-2">
-                    <User className="w-4 h-4 text-blue-600" />
+                  <Label htmlFor="seller-combined" className="text-sm font-medium flex items-center gap-2">
+                    <User className="w-4 h-4 text-green-600" />
                     Säljare
                   </Label>
-                  <Select value={selectedSellerIdTB} onValueChange={setSelectedSellerIdTB}>
+                  <Select value={selectedSellerId} onValueChange={setSelectedSellerId}>
                     <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
                       <SelectValue placeholder="Välj säljare" />
                     </SelectTrigger>
@@ -517,7 +380,7 @@ const Seller = () => {
                 <div className="space-y-2">
                   <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-green-600" />
-                    TB-belopp (kr)
+                    TB-belopp (valfritt)
                   </Label>
                   <Input
                     id="tb-amount"
@@ -526,75 +389,14 @@ const Seller = () => {
                     value={tbAmount}
                     onChange={(e) => setTbAmount(e.target.value)}
                     className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                    disabled={isSubmittingTB}
+                    disabled={isSubmitting}
                   />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isSubmittingTB || !selectedSellerIdTB || !tbAmount.trim()}
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
-              >
-                {isSubmittingTB ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Rapporterar...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5" />
-                    Rapportera TB-försäljning
-                  </div>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* 🛡️ ID-skydd-endast rapportering */}
-        <Card className="card-shadow border-0">
-          <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Shield className="w-6 h-6" />
-              🛡️ Rapportera ID-skydd (El Clásico)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <form onSubmit={handleSubmitIdSkydd} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="seller-skydd" className="text-sm font-medium flex items-center gap-2">
-                    <User className="w-4 h-4 text-green-600" />
-                    Säljare
-                  </Label>
-                  <Select value={selectedSellerIdSkydd} onValueChange={setSelectedSellerIdSkydd}>
-                    <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
-                      <SelectValue placeholder="Välj säljare" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sellers.map((seller) => (
-                        <SelectItem key={seller.id} value={seller.id}>
-                          <div className="flex items-center gap-2">
-                            {seller.profile_image_url && (
-                              <img
-                                src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
-                                alt={seller.name}
-                                className="w-6 h-6 rounded-full object-cover"
-                              />
-                            )}
-                            {seller.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="id-units" className="text-sm font-medium flex items-center gap-2">
                     <Shield className="w-4 h-4 text-green-600" />
-                    Antal ID-skydd
+                    ID-skydd (valfritt)
                   </Label>
                   <Input
                     id="id-units"
@@ -603,7 +405,7 @@ const Seller = () => {
                     value={idUnits}
                     onChange={(e) => setIdUnits(e.target.value)}
                     className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                    disabled={isSubmittingSkydd}
+                    disabled={isSubmitting}
                     min="0"
                   />
                 </div>
@@ -611,104 +413,10 @@ const Seller = () => {
 
               <Button
                 type="submit"
-                disabled={isSubmittingSkydd || !selectedSellerIdSkydd || !idUnits.trim()}
-                className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
-              >
-                {isSubmittingSkydd ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Rapporterar...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-5 h-5" />
-                    Rapportera ID-skydd
-                  </div>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* 🎯 Kombinerad rapportering (ID-skydd + TB) */}
-        <Card className="card-shadow border-0">
-          <CardHeader className="bg-gradient-to-r from-purple-500 to-purple-600 text-white">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <CheckCircle className="w-6 h-6" />
-              🎯 Kombinerad rapportering (ID-skydd + TB)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <form onSubmit={handleSubmitCombined} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="seller-combined" className="text-sm font-medium flex items-center gap-2">
-                  <User className="w-4 h-4 text-purple-600" />
-                  Säljare
-                </Label>
-                <Select value={selectedSellerIdCombined} onValueChange={setSelectedSellerIdCombined}>
-                  <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
-                    <SelectValue placeholder="Välj säljare" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sellers.map((seller) => (
-                      <SelectItem key={seller.id} value={seller.id}>
-                        <div className="flex items-center gap-2">
-                          {seller.profile_image_url && (
-                            <img
-                              src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
-                              alt={seller.name}
-                              className="w-6 h-6 rounded-full object-cover"
-                            />
-                          )}
-                          {seller.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tb-amount-combined" className="text-sm font-medium flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-blue-600" />
-                    TB-belopp (valfritt)
-                  </Label>
-                  <Input
-                    id="tb-amount-combined"
-                    type="text"
-                    placeholder="ex. 15000"
-                    value={tbAmountCombined}
-                    onChange={(e) => setTbAmountCombined(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                    disabled={isSubmittingCombined}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="id-units-combined" className="text-sm font-medium flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-green-600" />
-                    ID-skydd (valfritt)
-                  </Label>
-                  <Input
-                    id="id-units-combined"
-                    type="number"
-                    placeholder="ex. 2"
-                    value={idUnitsCombined}
-                    onChange={(e) => setIdUnitsCombined(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                    disabled={isSubmittingCombined}
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isSubmittingCombined || !selectedSellerIdCombined || (!tbAmountCombined.trim() && !idUnitsCombined.trim())}
+                disabled={isSubmitting || !selectedSellerId || (!tbAmount.trim() && !idUnits.trim())}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
               >
-                {isSubmittingCombined ? (
+                {isSubmitting ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Rapporterar...
