@@ -255,6 +255,12 @@ const Seller = () => {
     setIsSubmitting(true);
 
     try {
+      console.log('🚀 Calling report_sale with:', {
+        seller_id: selectedSellerId,
+        tb_amount: hasTB ? numericTB : null,
+        id_units: hasUnits ? numericUnits : null
+      });
+
       const { data: result, error } = await supabase.functions.invoke('report_sale', {
         body: {
           seller_id: selectedSellerId,
@@ -263,9 +269,11 @@ const Seller = () => {
         }
       });
 
+      console.log('📥 Response from report_sale:', { result, error });
+
       if (error) {
         console.error('Edge function error:', error);
-        throw new Error('Kunde inte ansluta till servern');
+        throw new Error(`Kunde inte ansluta till servern: ${error.message}`);
       }
 
       if (result.error) {
