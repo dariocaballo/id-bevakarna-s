@@ -7,6 +7,8 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
+  console.log('🌟 Report sale function started, method:', req.method);
+  
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -18,7 +20,8 @@ Deno.serve(async (req) => {
 
     // Validation
     if (!seller_id) {
-      return new Response("seller_id krävs", { 
+      console.log('❌ Validation failed: missing seller_id');
+      return new Response(JSON.stringify({ error: "seller_id krävs" }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -26,18 +29,29 @@ Deno.serve(async (req) => {
 
     // Check that at least one value is provided and > 0
     if (!(tb_amount > 0) && !(id_units > 0)) {
-      return new Response("Ange TB-belopp och/eller ID-skydd (> 0)", { 
+      console.log('❌ Validation failed: no valid amounts');
+      return new Response(JSON.stringify({ error: "Ange TB-belopp och/eller ID-skydd (> 0)" }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    console.log('🔑 Creating Supabase client...');
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('❌ Missing environment variables:', { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
+      return new Response(JSON.stringify({ error: "Server configuration error" }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Validate seller exists
+    console.log('👤 Validating seller exists:', seller_id);
     const { data: seller, error: sellerError } = await supabase
       .from('sellers')
       .select('id, name')
@@ -45,12 +59,14 @@ Deno.serve(async (req) => {
       .single();
 
     if (sellerError || !seller) {
-      console.error('Seller validation failed:', sellerError);
-      return new Response("Säljare kunde inte hittas", { 
+      console.error('❌ Seller validation failed:', sellerError);
+      return new Response(JSON.stringify({ error: "Säljare kunde inte hittas" }), { 
         status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+
+    console.log('✅ Seller validated:', seller.name);
 
     // Determine service type and values
     let serviceType = 'sstnet';
@@ -85,20 +101,33 @@ Deno.serve(async (req) => {
       .select()
       .single();
 
+    console.log('💾 Inserting sale with data:', {
+      seller_id,
+      seller_name: seller.name,
+      amount: mainAmount,
+      tb_amount: tb_amount || null,
+      units: id_units || null,
+      is_id_skydd: isIdSkydd,
+      service_type: serviceType
+    });
+
     if (error) {
-      console.error('Sale insert failed:', error);
-      throw error;
+      console.error('❌ Sale insert failed:', error);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    console.log('✅ Sale created:', data);
+    console.log('✅ Sale created successfully:', data);
 
     return new Response(JSON.stringify(data), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error('Report sale error:', e);
-    return new Response(String(e?.message ?? e), { 
+    console.error('❌ Report sale error:', e);
+    return new Response(JSON.stringify({ error: String(e?.message ?? e) }), { 
       status: 500, 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
