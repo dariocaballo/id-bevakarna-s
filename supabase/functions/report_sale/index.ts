@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
         seller_name: seller.name,
         amount: mainAmount,
         tb_amount: tb_amount || null, 
-        id_units: id_units || null,
+        units: id_units || null,  // Changed from id_units to units
         is_id_skydd: isIdSkydd,
         service_type: serviceType
       }])
