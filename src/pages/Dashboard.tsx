@@ -293,7 +293,7 @@ const Dashboard = () => {
     return new Intl.NumberFormat('sv-SE', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount) + ' TB';
+    }).format(amount) + ' tb';
   };
 
   const getMedalIcon = (index: number) => {

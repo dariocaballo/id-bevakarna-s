@@ -314,13 +314,159 @@ const Seller = () => {
 
   // Helper functions
   const formatCurrency = (amount: number) => {
-    return `${amount.toLocaleString('sv-SE')} kr`;
+    return `${amount.toLocaleString('sv-SE')} tb`;
   };
 
   const isCurrentMonth = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
     return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  };
+
+  // Local storage for remembering seller name
+  const [rememberedName, setRememberedName] = useState(() => {
+    return localStorage.getItem('seller-name') || '';
+  });
+
+  const [reportType, setReportType] = useState<'tb-only' | 'tb-sales'>('tb-only');
+  const [sellerName, setSellerName] = useState(rememberedName);
+  const [tb, setTb] = useState('');
+  const [salesCount, setSalesCount] = useState('');
+
+  // Save seller name to localStorage when it changes
+  useEffect(() => {
+    if (sellerName.trim()) {
+      localStorage.setItem('seller-name', sellerName.trim());
+    }
+  }, [sellerName]);
+
+  // Updated submit handler for simplified form
+  const handleSubmitSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!sellerName.trim()) {
+      toast({
+        title: "Fyll i ditt namn",
+        description: "Ditt namn måste anges för att rapportera försäljning.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const hasTB = tb.trim() !== '';
+    const hasSalesCount = salesCount.trim() !== '';
+
+    if (!hasTB) {
+      toast({
+        title: "Fyll i TB-belopp",
+        description: "TB-belopp måste anges.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (reportType === 'tb-sales' && !hasSalesCount) {
+      toast({
+        title: "Fyll i antal sälj",
+        description: "Antal sälj måste anges för El Clásico-rapportering.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const numericTB = parseFloat(tb);
+    if (isNaN(numericTB) || numericTB <= 0) {
+      toast({
+        title: "Ogiltigt TB-belopp",
+        description: "Ange ett giltigt TB-belopp större än 0.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    let numericSalesCount = 0;
+    if (reportType === 'tb-sales') {
+      numericSalesCount = parseInt(salesCount);
+      if (isNaN(numericSalesCount) || numericSalesCount <= 0) {
+        toast({
+          title: "Ogiltigt antal sälj",
+          description: "Ange ett giltigt antal sälj större än 0.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Find or create seller by name
+      let sellerId = '';
+      const existingSeller = sellers.find(s => s.name.toLowerCase() === sellerName.trim().toLowerCase());
+      
+      if (existingSeller) {
+        sellerId = existingSeller.id;
+      } else {
+        // Create new seller
+        const { data: newSeller, error: sellerError } = await supabase
+          .from('sellers')
+          .insert([{ name: sellerName.trim() }])
+          .select()
+          .single();
+
+        if (sellerError) throw sellerError;
+        sellerId = newSeller.id;
+      }
+
+      console.log('🚀 Calling report_sale with:', {
+        seller_id: sellerId,
+        tb_amount: numericTB,
+        id_units: reportType === 'tb-sales' ? numericSalesCount : undefined
+      });
+
+      const { data: result, error } = await supabase.functions.invoke('report_sale', {
+        body: {
+          seller_id: sellerId,
+          tb_amount: numericTB,
+          id_units: reportType === 'tb-sales' ? numericSalesCount : undefined
+        }
+      });
+
+      console.log('📥 Response from report_sale:', { result, error });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Kunde inte ansluta till servern');
+      }
+
+      if (!result) {
+        throw new Error('Inget svar från servern');
+      }
+
+      let description = `${sellerName} rapporterade ${numericTB.toLocaleString('sv-SE')} tb`;
+      if (reportType === 'tb-sales') {
+        description += ` + ${numericSalesCount} sälj`;
+      }
+
+      toast({
+        title: "Försäljning rapporterad! 🎉",
+        description,
+      });
+
+      // Reset form (keep seller name)
+      setTb('');
+      setSalesCount('');
+      
+    } catch (error: any) {
+      console.error('❌ Sale reporting failed:', error);
+      toast({
+        title: "Fel",
+        description: error.message || "Kunde inte registrera försäljning",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -343,86 +489,106 @@ const Seller = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">Säljrapportering</h1>
-          <p className="text-gray-600">Registrera dina försäljningar här</p>
+          <p className="text-gray-600">Rapportera dina försäljningar här</p>
         </div>
 
-        {/* Kombinerad rapportering */}
+        {/* Report Type Selection */}
+        <Card className="card-shadow border-0">
+          <CardHeader>
+            <CardTitle className="text-xl text-slate-700">Välj rapporteringstyp</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Button
+                variant={reportType === 'tb-only' ? 'default' : 'outline'}
+                onClick={() => setReportType('tb-only')}
+                className="h-16 flex flex-col items-center justify-center space-y-1"
+              >
+                <span className="font-semibold">Bara TB</span>
+                <span className="text-sm opacity-80">Rapportera endast TB-belopp</span>
+              </Button>
+              <Button
+                variant={reportType === 'tb-sales' ? 'default' : 'outline'}
+                onClick={() => setReportType('tb-sales')}
+                className="h-16 flex flex-col items-center justify-center space-y-1"
+              >
+                <span className="font-semibold">TB + El Clásico</span>
+                <span className="text-sm opacity-80">TB-belopp + antal sälj</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Reporting Form */}
         <Card className="card-shadow border-0">
           <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
             <CardTitle className="text-xl flex items-center gap-2">
               <CheckCircle className="w-6 h-6" />
-              ✅ Kombinerad rapportering (ID-skydd + TB)
+              {reportType === 'tb-only' ? 'TB-rapportering' : 'TB + El Clásico-rapportering'}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             <form onSubmit={handleSubmitSale} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="seller-id" className="text-sm font-medium flex items-center gap-2">
+                  <Label htmlFor="seller-name" className="text-sm font-medium flex items-center gap-2">
                     <User className="w-4 h-4 text-green-600" />
-                    Säljare (obligatoriskt)
+                    Ditt namn (kommer ihåg)
                   </Label>
-                  <Select value={selectedSellerId} onValueChange={setSelectedSellerId}>
-                    <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
-                      <SelectValue placeholder="Välj säljare" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sellers.map((seller) => (
-                        <SelectItem key={seller.id} value={seller.id}>
-                          <div className="flex items-center gap-2">
-                            {seller.profile_image_url && (
-                              <img
-                                src={getCachedImage(seller.profile_image_url) || seller.profile_image_url}
-                                alt={seller.name}
-                                className="w-6 h-6 rounded-full object-cover"
-                              />
-                            )}
-                            {seller.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    id="seller-name"
+                    type="text"
+                    placeholder="Ange ditt namn"
+                    value={sellerName}
+                    onChange={(e) => setSellerName(e.target.value)}
+                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
+                    disabled={isSubmitting}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-green-600" />
-                    TB-belopp (valfritt)
+                    TB-belopp (obligatoriskt)
                   </Label>
                   <Input
                     id="tb-amount"
                     type="number"
                     placeholder="ex. 15000"
-                    value={tbAmount}
-                    onChange={(e) => setTbAmount(e.target.value)}
+                    value={tb}
+                    onChange={(e) => setTb(e.target.value)}
                     className="smooth-transition focus:ring-primary/20 focus:border-primary"
                     disabled={isSubmitting}
                     min="0"
+                    required
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="id-units" className="text-sm font-medium flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-green-600" />
-                    ID-skydd (valfritt)
-                  </Label>
-                  <Input
-                    id="id-units"
-                    type="number"
-                    placeholder="ex. 2"
-                    value={idUnits}
-                    onChange={(e) => setIdUnits(e.target.value)}
-                    className="smooth-transition focus:ring-primary/20 focus:border-primary"
-                    disabled={isSubmitting}
-                    min="0"
-                  />
-                </div>
+                {reportType === 'tb-sales' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="sales-count" className="text-sm font-medium flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-green-600" />
+                      Antal sälj (El Clásico)
+                    </Label>
+                    <Input
+                      id="sales-count"
+                      type="number"
+                      placeholder="ex. 2"
+                      value={salesCount}
+                      onChange={(e) => setSalesCount(e.target.value)}
+                      className="smooth-transition focus:ring-primary/20 focus:border-primary"
+                      disabled={isSubmitting}
+                      min="0"
+                      required
+                    />
+                  </div>
+                )}
               </div>
 
               <Button
                 type="submit"
-                disabled={isSubmitting || !selectedSellerId || ((!tbAmount || parseFloat(tbAmount) <= 0) && (!idUnits || parseInt(idUnits) <= 0))}
+                disabled={isSubmitting || !sellerName.trim() || !tb.trim() || (reportType === 'tb-sales' && !salesCount.trim())}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
               >
                 {isSubmitting ? (
@@ -460,10 +626,8 @@ const Seller = () => {
                       <div>
                         <p className="font-semibold text-gray-900">{sale.seller_name}</p>
                         <p className="text-sm text-gray-600">
-                          {sale.is_id_skydd 
-                            ? `${sale.units} ID-skydd` 
-                            : `${formatCurrency(sale.tb_amount)}`}
-                          {sale.is_id_skydd && sale.tb_amount > 0 && ` + ${formatCurrency(sale.tb_amount)}`}
+                          {sale.tb_amount ? `${sale.tb_amount.toLocaleString('sv-SE')} tb` : '0 tb'}
+                          {sale.units && sale.units > 0 && ` + ${sale.units} sälj`}
                         </p>
                         <p className="text-xs text-gray-500">
                           {new Date(sale.timestamp).toLocaleTimeString('sv-SE', { 
@@ -487,26 +651,6 @@ const Seller = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Info om El Clásico tävlingen */}
-        <Card className="card-shadow border-0 mt-8 bg-gradient-to-r from-yellow-50 to-yellow-100">
-          <CardContent className="p-6">
-            <div className="text-center">
-              <h3 className="text-lg font-bold text-yellow-800 mb-2 flex items-center justify-center gap-2">
-                🏆 El Clásico-tävlingen
-              </h3>
-              <p className="text-sm text-yellow-700 mb-2">
-                <strong>Period:</strong> 1 augusti – 30 september 2025
-              </p>
-              <p className="text-sm text-yellow-700 mb-2">
-                <strong>Mål:</strong> 2 ID-skydd per dag (totalt 86 st)
-              </p>
-              <p className="text-xs text-yellow-600">
-                Endast ID-Bevakarna-försäljning räknas mot tävlingen. Varje försäljning = 1 ID-skydd.
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>
