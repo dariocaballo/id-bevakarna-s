@@ -229,7 +229,7 @@ const Seller = () => {
     let numericUnits = 0;
 
     if (hasTB) {
-      numericTB = parseFloat(tbAmount.replace(/[^\d.,]/g, '').replace(',', '.'));
+      numericTB = parseFloat(tbAmount);
       if (isNaN(numericTB) || numericTB <= 0) {
         toast({
           title: "Ogiltigt TB-belopp",
@@ -264,8 +264,8 @@ const Seller = () => {
       const { data: result, error } = await supabase.functions.invoke('report_sale', {
         body: {
           seller_id: selectedSellerId,
-          tb_amount: hasTB ? numericTB : null,
-          id_units: hasUnits ? numericUnits : null
+          tb_amount: hasTB ? numericTB : undefined,
+          id_units: hasUnits ? numericUnits : undefined
         }
       });
 
@@ -273,11 +273,11 @@ const Seller = () => {
 
       if (error) {
         console.error('Edge function error:', error);
-        throw new Error(`Kunde inte ansluta till servern: ${error.message}`);
+        throw new Error(error.message || 'Kunde inte ansluta till servern');
       }
 
-      if (result.error) {
-        throw new Error(result.error);
+      if (!result) {
+        throw new Error('Inget svar från servern');
       }
 
       const selectedSeller = sellers.find(s => s.id === selectedSellerId);
@@ -346,7 +346,7 @@ const Seller = () => {
           <p className="text-gray-600">Registrera dina försäljningar här</p>
         </div>
 
-        {/* ✅ Kombinerad rapportering */}
+        {/* Kombinerad rapportering */}
         <Card className="card-shadow border-0">
           <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white">
             <CardTitle className="text-xl flex items-center gap-2">
@@ -358,9 +358,9 @@ const Seller = () => {
             <form onSubmit={handleSubmitSale} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="seller-combined" className="text-sm font-medium flex items-center gap-2">
+                  <Label htmlFor="seller-id" className="text-sm font-medium flex items-center gap-2">
                     <User className="w-4 h-4 text-green-600" />
-                    Säljare
+                    Säljare (obligatoriskt)
                   </Label>
                   <Select value={selectedSellerId} onValueChange={setSelectedSellerId}>
                     <SelectTrigger className="smooth-transition focus:ring-primary/20 focus:border-primary">
@@ -392,12 +392,13 @@ const Seller = () => {
                   </Label>
                   <Input
                     id="tb-amount"
-                    type="text"
+                    type="number"
                     placeholder="ex. 15000"
                     value={tbAmount}
                     onChange={(e) => setTbAmount(e.target.value)}
                     className="smooth-transition focus:ring-primary/20 focus:border-primary"
                     disabled={isSubmitting}
+                    min="0"
                   />
                 </div>
 
@@ -421,7 +422,7 @@ const Seller = () => {
 
               <Button
                 type="submit"
-                disabled={isSubmitting || !selectedSellerId || (!tbAmount.trim() && !idUnits.trim())}
+                disabled={isSubmitting || !selectedSellerId || ((!tbAmount || parseFloat(tbAmount) <= 0) && (!idUnits || parseInt(idUnits) <= 0))}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold smooth-transition hover:scale-105 disabled:hover:scale-100"
               >
                 {isSubmitting ? (
