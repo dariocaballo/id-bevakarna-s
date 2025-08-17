@@ -202,17 +202,17 @@ const Dashboard = () => {
 
   const handleDeleteSale = async (saleId: string, isToday: boolean) => {
     try {
-      const { error } = await supabase
-        .from('sales')
-        .delete()
-        .eq('id', saleId);
+      const { data: result, error } = await supabase.functions.invoke('sales-operations', {
+        body: { action: 'delete_sale', sale_id: saleId }
+      });
 
       if (error) throw error;
+      if (result.error) throw new Error(result.error);
 
       // The realtime subscription will automatically update the data
       setShowDeleteConfirm(null);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting sale:', error);
     }
   };
