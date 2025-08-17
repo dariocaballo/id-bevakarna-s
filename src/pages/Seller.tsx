@@ -34,18 +34,43 @@ interface Sale {
 
 const Seller = () => {
   const [sellers, setSellers] = useState<Seller[]>([]);
-  const [selectedSellerId, setSelectedSellerId] = useState('');
-  const [tbAmount, setTbAmount] = useState('');
-  const [idUnits, setIdUnits] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [todaysSales, setTodaysSales] = useState<Sale[]>([]);
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   const { toast } = useToast();
+
+  // Local storage for remembering seller name
+  const [rememberedName, setRememberedName] = useState(() => {
+    return localStorage.getItem('seller-name') || '';
+  });
+
+  const [reportType, setReportType] = useState<'tb-only' | 'tb-sales'>('tb-only');
+  const [sellerName, setSellerName] = useState(rememberedName);
+  const [tb, setTb] = useState('');
+  const [salesCount, setSalesCount] = useState('');
   
   // Audio and image optimization hooks
   const { preloadImages, getCachedImage } = useImageCache();
   const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
+
+  // Save seller name to localStorage when it changes
+  useEffect(() => {
+    if (sellerName.trim()) {
+      localStorage.setItem('seller-name', sellerName.trim());
+    }
+  }, [sellerName]);
+
+  // Helper functions
+  const formatCurrency = (amount: number) => {
+    return `${amount.toLocaleString('sv-SE')} tb`;
+  };
+
+  const isCurrentMonth = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  };
 
   // Load all sellers (public access)
   const loadSellers = async () => {
@@ -200,145 +225,6 @@ const Seller = () => {
     }
   };
 
-  // Submit sale via edge function
-  const handleSubmitSale = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedSellerId) {
-      toast({
-        title: "Välj säljare",
-        description: "Du måste välja en säljare.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const hasTB = tbAmount.trim() !== '';
-    const hasUnits = idUnits.trim() !== '';
-
-    if (!hasTB && !hasUnits) {
-      toast({
-        title: "Fyll i minst ett fält",
-        description: "Ange antingen TB-belopp eller antal ID-skydd (eller båda).",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    let numericTB = 0;
-    let numericUnits = 0;
-
-    if (hasTB) {
-      numericTB = parseFloat(tbAmount);
-      if (isNaN(numericTB) || numericTB <= 0) {
-        toast({
-          title: "Ogiltigt TB-belopp",
-          description: "Ange ett giltigt TB-belopp större än 0.",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
-
-    if (hasUnits) {
-      numericUnits = parseInt(idUnits);
-      if (isNaN(numericUnits) || numericUnits <= 0) {
-        toast({
-          title: "Ogiltigt antal ID-skydd",
-          description: "Ange ett giltigt antal ID-skydd större än 0.",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      console.log('🚀 Calling report_sale with:', {
-        seller_id: selectedSellerId,
-        tb_amount: hasTB ? numericTB : null,
-        id_units: hasUnits ? numericUnits : null
-      });
-
-      const { data: result, error } = await supabase.functions.invoke('report_sale', {
-        body: {
-          seller_id: selectedSellerId,
-          tb_amount: hasTB ? numericTB : undefined,
-          id_units: hasUnits ? numericUnits : undefined
-        }
-      });
-
-      console.log('📥 Response from report_sale:', { result, error });
-
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Kunde inte ansluta till servern');
-      }
-
-      if (!result) {
-        throw new Error('Inget svar från servern');
-      }
-
-      const selectedSeller = sellers.find(s => s.id === selectedSellerId);
-      let description = `${selectedSeller?.name} rapporterade`;
-      if (hasTB && hasUnits) {
-        description += ` ${numericTB.toLocaleString('sv-SE')} TB + ${numericUnits} ID-skydd`;
-      } else if (hasTB) {
-        description += ` ${numericTB.toLocaleString('sv-SE')} TB`;
-      } else {
-        description += ` ${numericUnits} ID-skydd`;
-      }
-
-      toast({
-        title: "Försäljning rapporterad! 🎉",
-        description,
-      });
-
-      // Reset form
-      setTbAmount('');
-      setIdUnits('');
-      setSelectedSellerId('');
-      
-    } catch (error: any) {
-      console.error('❌ Sale reporting failed:', error);
-      toast({
-        title: "Fel",
-        description: error.message || "Kunde inte registrera försäljning",
-        variant: "destructive"
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Helper functions
-  const formatCurrency = (amount: number) => {
-    return `${amount.toLocaleString('sv-SE')} tb`;
-  };
-
-  const isCurrentMonth = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-  };
-
-  // Local storage for remembering seller name
-  const [rememberedName, setRememberedName] = useState(() => {
-    return localStorage.getItem('seller-name') || '';
-  });
-
-  const [reportType, setReportType] = useState<'tb-only' | 'tb-sales'>('tb-only');
-  const [sellerName, setSellerName] = useState(rememberedName);
-  const [tb, setTb] = useState('');
-  const [salesCount, setSalesCount] = useState('');
-
-  // Save seller name to localStorage when it changes
-  useEffect(() => {
-    if (sellerName.trim()) {
-      localStorage.setItem('seller-name', sellerName.trim());
-    }
-  }, [sellerName]);
 
   // Updated submit handler for simplified form
   const handleSubmitSale = async (e: React.FormEvent) => {
