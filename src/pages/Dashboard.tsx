@@ -62,6 +62,7 @@ const Dashboard = () => {
       
       // Stop any current audio immediately
       if (currentAudio) {
+        console.log('🛑 Stopping current audio for new celebration');
         setCurrentAudio(null);
         setCelebrationAudioDuration(undefined);
       }
@@ -70,15 +71,23 @@ const Dashboard = () => {
       let matchedSeller = next.seller;
       if (!matchedSeller && next.sale.seller_id && sellers.length > 0) {
         matchedSeller = sellers.find(s => s.id === next.sale.seller_id);
+        console.log('🔍 Found seller by ID:', matchedSeller?.name);
       }
       if (!matchedSeller && next.sale.seller_name && sellers.length > 0) {
         matchedSeller = sellers.find(s => s.name.toLowerCase() === next.sale.seller_name.toLowerCase());
+        console.log('🔍 Found seller by name:', matchedSeller?.name);
       }
       
       const enhancedNext = { ...next, seller: matchedSeller };
       setCurrentCelebration(enhancedNext);
-      console.log('🎊 Starting celebration for:', enhancedNext.sale.seller_name);
-      console.log('🎯 Final matched seller:', matchedSeller);
+      console.log('🎊 Starting celebration for seller:', enhancedNext.sale.seller_name);
+      console.log('🎯 Matched seller data:', {
+        id: matchedSeller?.id,
+        name: matchedSeller?.name,
+        hasSound: !!matchedSeller?.sound_file_url,
+        soundUrl: matchedSeller?.sound_file_url,
+        updatedAt: matchedSeller?.updated_at
+      });
       
       // Start confetti immediately when celebration begins
       confetti({
@@ -91,18 +100,23 @@ const Dashboard = () => {
       // Setup audio if available with proper cache busting
       if (matchedSeller?.sound_file_url) {
         const audioUrl = matchedSeller.sound_file_url;
-        console.log('🔊 Setting up audio:', audioUrl);
+        const versionedUrl = getVersionedUrl(audioUrl, matchedSeller.updated_at) || audioUrl;
+        console.log('🔊 Setting up audio playback:');
+        console.log('  - Original URL:', audioUrl);
+        console.log('  - Versioned URL:', versionedUrl);
+        console.log('  - Updated at:', matchedSeller.updated_at);
         
+        // Set up audio immediately - AudioManager will handle autoplay/user activation
         setCurrentAudio({ 
-          soundUrl: audioUrl, 
+          soundUrl: audioUrl, // Use original URL, AudioManager will handle versioning
           sellerName: matchedSeller.name,
           sale: enhancedNext.sale,
           updatedAt: matchedSeller.updated_at
         });
         setCelebrationAudioDuration(undefined); // Will be set by AudioManager
       } else {
-        console.log('⚠️ No sound file for seller:', enhancedNext.sale.seller_name);
-        setCelebrationAudioDuration(3000); // Default duration
+        console.log('⚠️ No sound file available for seller:', enhancedNext.sale.seller_name);
+        setCelebrationAudioDuration(3000); // Default duration when no audio
       }
     }
   }, [celebrationQueue, currentCelebration, currentAudio, sellers]);
