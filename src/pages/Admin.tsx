@@ -76,19 +76,26 @@ const Admin = () => {
       // First remove any existing profile image for this seller
       const { data: existingFiles } = await supabase.storage
         .from('seller-profiles')
-        .list('profiles', { search: sellerId });
+        .list('profiles');
 
-      if (existingFiles && existingFiles.length > 0) {
-        const filesToRemove = existingFiles.map(f => `profiles/${f.name}`);
-        await supabase.storage
-          .from('seller-profiles')
-          .remove(filesToRemove);
+      if (existingFiles) {
+        const filesToRemove = existingFiles
+          .filter(f => f.name.includes(sellerId))
+          .map(f => `profiles/${f.name}`);
+        
+        if (filesToRemove.length > 0) {
+          console.log('🗑️ Removing old profile images:', filesToRemove);
+          await supabase.storage
+            .from('seller-profiles')
+            .remove(filesToRemove);
+        }
       }
 
       const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `profiles/${fileName}`;
 
+      console.log('📤 Uploading profile image:', filePath);
       const { error: uploadError } = await supabase.storage
         .from('seller-profiles')
         .upload(filePath, file, { upsert: true });
@@ -99,8 +106,16 @@ const Admin = () => {
         .from('seller-profiles')
         .getPublicUrl(filePath);
 
+      // Add cache busting timestamp
+      const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`;
+      
+      console.log('🔗 Generated image URL:', cacheBustedUrl);
+
       const { error: updateError } = await supabase.from('sellers')
-        .update({ profile_image_url: publicUrl })
+        .update({ 
+          profile_image_url: cacheBustedUrl,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', sellerId);
 
       if (updateError) throw updateError;
@@ -108,7 +123,7 @@ const Admin = () => {
       toast({ title: "Framgång", description: "Profilbild uppladdad!" });
       loadSellers();
     } catch (error) {
-      console.error('Error uploading profile image:', error);
+      console.error('❌ Error uploading profile image:', error);
       toast({ title: "Fel", description: "Kunde inte ladda upp profilbild", variant: "destructive" });
     }
   };
@@ -118,19 +133,26 @@ const Admin = () => {
       // First remove any existing sound file for this seller
       const { data: existingFiles } = await supabase.storage
         .from('seller-sounds')
-        .list('sounds', { search: sellerId });
+        .list('sounds');
 
-      if (existingFiles && existingFiles.length > 0) {
-        const filesToRemove = existingFiles.map(f => `sounds/${f.name}`);
-        await supabase.storage
-          .from('seller-sounds')
-          .remove(filesToRemove);
+      if (existingFiles) {
+        const filesToRemove = existingFiles
+          .filter(f => f.name.includes(sellerId))
+          .map(f => `sounds/${f.name}`);
+        
+        if (filesToRemove.length > 0) {
+          console.log('🗑️ Removing old sound files:', filesToRemove);
+          await supabase.storage
+            .from('seller-sounds')
+            .remove(filesToRemove);
+        }
       }
 
       const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `sounds/${fileName}`;
 
+      console.log('📤 Uploading sound file:', filePath);
       const { error: uploadError } = await supabase.storage
         .from('seller-sounds')
         .upload(filePath, file, { upsert: true });
@@ -141,16 +163,24 @@ const Admin = () => {
         .from('seller-sounds')
         .getPublicUrl(filePath);
 
+      // Add cache busting timestamp
+      const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`;
+      
+      console.log('🔗 Generated sound URL:', cacheBustedUrl);
+
       const { error: updateError } = await supabase.from('sellers')
-        .update({ sound_file_url: publicUrl })
+        .update({ 
+          sound_file_url: cacheBustedUrl,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', sellerId);
 
       if (updateError) throw updateError;
 
-      toast({ title: "Framgång", description: "Ljudfil uppladdad!" });
+      toast({ title: "Framgång", description: "Ljudfil uppladdad och redo att spelas!" });
       loadSellers();
     } catch (error) {
-      console.error('Error uploading sound file:', error);
+      console.error('❌ Error uploading sound file:', error);
       toast({ title: "Fel", description: "Kunde inte ladda upp ljudfil", variant: "destructive" });
     }
   };

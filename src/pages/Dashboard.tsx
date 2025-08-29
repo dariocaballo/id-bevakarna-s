@@ -34,16 +34,17 @@ const Dashboard = () => {
     await ensureAudioContextReady();
     
     try {
-      console.log('🎵 Attempting to play seller sound...');
+      console.log('🎵 Attempting to play seller sound for:', sale.seller_name);
+      console.log('🎵 Seller data:', { sellerId: sale.seller_id, soundUrl: seller?.sound_file_url });
       
       const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
       
       if (audioResult.played) {
-        const durationMs = audioResult.duration ? audioResult.duration * 1000 : 3000;
-        console.log('🎵 Audio played successfully, duration:', audioResult.duration, 'seconds');
+        const durationMs = audioResult.duration || 3000;
+        console.log('🎵 Audio played successfully, duration:', durationMs, 'ms');
         setCelebrationAudioDuration(durationMs);
       } else {
-        console.log('🎵 No custom audio, using default duration');
+        console.log('🎵 No custom audio played, using default duration');
         setCelebrationAudioDuration(3000);
       }
     } catch (error) {

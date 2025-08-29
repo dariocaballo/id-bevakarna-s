@@ -236,7 +236,7 @@ export const useAudioManager = () => {
         
         // Convert to milliseconds with fallback
         const durationMs = duration && isFinite(duration) 
-          ? duration * 1000 
+          ? duration * 1000 // Convert seconds to milliseconds
           : 3000; // Default 3 seconds
         
         console.log(`🎵 Playing enhanced sound for ${sellerName || 'Unknown seller'} (Duration: ${durationMs}ms, Ready state: ${preloadedAudio.readyState})`);

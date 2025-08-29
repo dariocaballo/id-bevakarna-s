@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -29,8 +29,12 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
   onDeleted
 }) => {
   const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
+    setIsDeleting(true);
+    console.log('🗑️ Attempting to delete sale:', { saleId, sellerName, amount });
+    
     try {
       const { error } = await supabase
         .from('sales')
@@ -38,15 +42,17 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
         .eq('id', saleId);
 
       if (error) {
-        console.error('Error deleting sale:', error);
+        console.error('❌ Error deleting sale:', error);
         toast({
           title: "Fel",
-          description: "Kunde inte ta bort försäljningen",
+          description: `Kunde inte ta bort försäljningen: ${error.message}`,
           variant: "destructive"
         });
         return;
       }
 
+      console.log('✅ Sale deleted successfully:', saleId);
+      
       toast({
         title: "Försäljning borttagen",
         description: `${sellerName}s försäljning på ${amount.toLocaleString('sv-SE')} tb har tagits bort`,
@@ -56,12 +62,14 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
         onDeleted();
       }
     } catch (error) {
-      console.error('Error deleting sale:', error);
+      console.error('❌ Unexpected error deleting sale:', error);
       toast({
         title: "Fel",
-        description: "Ett oväntat fel inträffade",
+        description: "Ett oväntat fel inträffade vid radering",
         variant: "destructive"
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -72,8 +80,13 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
           variant="ghost"
           size="sm"
           className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          disabled={isDeleting}
         >
-          <Trash2 className="w-4 h-4" />
+          {isDeleting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Trash2 className="w-4 h-4" />
+          )}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -81,13 +94,24 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
           <AlertDialogTitle>Ta bort försäljning?</AlertDialogTitle>
           <AlertDialogDescription>
             Är du säker på att du vill ta bort {sellerName}s försäljning på {amount.toLocaleString('sv-SE')} tb?
-            Denna åtgärd kan inte ångras och kommer att uppdatera alla summor automatiskt.
+            Denna åtgärd kan inte ångras och kommer att uppdatera alla summor automatiskt via realtid.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Avbryt</AlertDialogCancel>
-          <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-            Ta bort
+          <AlertDialogCancel disabled={isDeleting}>Avbryt</AlertDialogCancel>
+          <AlertDialogAction 
+            onClick={handleDelete} 
+            className="bg-red-600 hover:bg-red-700"
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Raderar...
+              </>
+            ) : (
+              'Ta bort'
+            )}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
