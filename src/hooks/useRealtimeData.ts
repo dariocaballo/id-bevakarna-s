@@ -6,12 +6,8 @@ interface Sale {
   id: string;
   seller_name: string;
   seller_id?: string;
-  amount: number;
-  tb_amount?: number;
-  units?: number;
+  amount_tb: number;
   timestamp: string;
-  service_type?: string;
-  is_id_skydd?: boolean;
 }
 
 interface Seller {
@@ -19,7 +15,6 @@ interface Seller {
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
-  monthly_goal: number;
 }
 
 interface DailyChallenge {
@@ -140,24 +135,20 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         return saleDate >= monthStart;
       });
       
-      // Calculate totals using tb_amount for TB sales (both sstnet and combined with TB)
+      // Calculate totals
       const todaysTotal = todaysSales
-        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
-        .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
+        .reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
       const monthsTotal = monthsSales
-        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
-        .reduce((sum: number, sale: Sale) => sum + (sale.tb_amount || sale.amount || 0), 0);
+        .reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
       
-      // Calculate seller rankings using tb_amount for TB sales (both sstnet and combined with TB)
+      // Calculate seller rankings
       const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      monthsSales
-        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
-        .forEach((sale: Sale) => {
-          if (!monthlySellerTotals[sale.seller_name]) {
-            monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-          }
-          monthlySellerTotals[sale.seller_name].amount += (sale.tb_amount || sale.amount || 0);
-        });
+      monthsSales.forEach((sale: Sale) => {
+        if (!monthlySellerTotals[sale.seller_name]) {
+          monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
+        }
+        monthlySellerTotals[sale.seller_name].amount += sale.amount_tb;
+      });
       
       const topSellersArray = Object.entries(monthlySellerTotals)
         .map(([name, data]) => {
@@ -171,16 +162,14 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 5);
       
-      // Calculate today's sellers using tb_amount for TB sales (both sstnet and combined with TB)
+      // Calculate today's sellers
       const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      todaysSales
-        .filter((sale: Sale) => !sale.is_id_skydd || (sale.is_id_skydd && (sale.tb_amount || 0) > 0))
-        .forEach((sale: Sale) => {
-          if (!todaysSellerTotals[sale.seller_name]) {
-            todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-          }
-          todaysSellerTotals[sale.seller_name].amount += (sale.tb_amount || sale.amount || 0);
-        });
+      todaysSales.forEach((sale: Sale) => {
+        if (!todaysSellerTotals[sale.seller_name]) {
+          todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
+        }
+        todaysSellerTotals[sale.seller_name].amount += sale.amount_tb;
+      });
       
       const todaysSellersArray = Object.entries(todaysSellerTotals)
         .map(([name, data]) => {
@@ -210,36 +199,16 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
   }, []);
 
   const loadSettings = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.from('dashboard_settings').select('*');
-      if (error) throw error;
-      
-      const settingsObj: { [key: string]: any } = {};
-      data?.forEach(setting => {
-        settingsObj[setting.setting_key] = setting.setting_value;
-      });
-      
-      if (isMountedRef.current) {
-        setSettings(settingsObj);
-      }
-    } catch (error) {
-      console.error('❌ Error loading settings:', error);
+    // Dashboard settings not implemented yet
+    if (isMountedRef.current) {
+      setSettings({});
     }
   }, []);
 
   const loadChallenges = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('daily_challenges')
-        .select('*')
-        .eq('is_active', true);
-      if (error) throw error;
-      
-      if (isMountedRef.current) {
-        setActiveChallenges(data || []);
-      }
-    } catch (error) {
-      console.error('❌ Error loading challenges:', error);
+    // Daily challenges not implemented yet
+    if (isMountedRef.current) {
+      setActiveChallenges([]);
     }
   }, []);
 
@@ -335,11 +304,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
             const newSale = payload.new as Sale;
             console.log('🎆 NEW SALE REALTIME UPDATE:', {
               seller: newSale.seller_name,
-              amount: newSale.amount,
-              tb_amount: newSale.tb_amount,
-              units: newSale.units,
-              service_type: newSale.service_type,
-              is_id_skydd: newSale.is_id_skydd,
+              amount_tb: newSale.amount_tb,
               timestamp: newSale.timestamp,
               id: newSale.id
             });
@@ -389,32 +354,6 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
           if (onSellerUpdate && payload.eventType === 'UPDATE') {
             onSellerUpdate(sellersData);
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'dashboard_settings' },
-        () => {
-          lastHeartbeatRef.current = Date.now();
-          lastDataUpdateRef.current = Date.now();
-          reconnectAttemptsRef.current = 0; // Reset on successful message
-          connectionStableRef.current = true;
-          
-          console.log('⚙️ Settings update received at', new Date().toISOString());
-          loadSettings();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'daily_challenges' },
-        () => {
-          lastHeartbeatRef.current = Date.now();
-          lastDataUpdateRef.current = Date.now();
-          reconnectAttemptsRef.current = 0; // Reset on successful message
-          connectionStableRef.current = true;
-          
-          console.log('🎯 Challenges update received at', new Date().toISOString());
-          loadChallenges();
         }
       )
       .subscribe((status) => {

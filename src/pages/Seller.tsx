@@ -3,16 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { User, DollarSign, Trophy } from 'lucide-react';
+import { User, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { SaleDeleteButton } from '@/components/SaleDeleteButton';
 
 const Seller = () => {
   const [sellerName, setSellerName] = useState('');
   const [tb, setTb] = useState('');
-  const [salesCount, setSalesCount] = useState('');
-  const [isElClasico, setIsElClasico] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [todaysSales, setTodaysSales] = useState<any[]>([]);
   const { toast } = useToast();
@@ -89,33 +87,19 @@ const Seller = () => {
       return;
     }
 
-    let salesNumber = undefined;
-    if (isElClasico) {
-      salesNumber = parseInt(salesCount);
-      if (isNaN(salesNumber) || salesNumber <= 0) {
-        toast({
-          title: "Ogiltigt antal sälj",
-          description: "Ange ett giltigt antal sälj för El Clásico.",
-          variant: "destructive"
-        });
-        return;
-      }
-    }
 
     setIsSubmitting(true);
 
     try {
       console.log('🚀 Submitting sale:', {
         sellerName: sellerName.trim(),
-        tb: tbNumber,
-        salesCount: salesNumber
+        tb: tbNumber
       });
 
       const { data, error } = await supabase.functions.invoke('report_sale', {
         body: {
           sellerName: sellerName.trim(),
-          tb: tbNumber,
-          salesCount: salesNumber
+          tb: tbNumber
         }
       });
 
@@ -126,10 +110,7 @@ const Seller = () => {
 
       console.log('✅ Sale reported successfully:', data);
 
-      let description = `${sellerName} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
-      if (isElClasico && salesNumber) {
-        description += ` + ${salesNumber} sälj (El Clásico)`;
-      }
+      const description = `${sellerName} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
 
       toast({
         title: "Försäljning rapporterad! 🎉",
@@ -138,8 +119,6 @@ const Seller = () => {
 
       // Reset form (keep seller name)
       setTb('');
-      setSalesCount('');
-      setIsElClasico(false);
       
     } catch (error: any) {
       console.error('❌ Sale reporting failed:', error);
@@ -211,48 +190,10 @@ const Seller = () => {
                 />
               </div>
 
-              {/* El Clasico Toggle */}
-              <div className="space-y-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="el-clasico"
-                    checked={isElClasico}
-                    onCheckedChange={setIsElClasico}
-                    disabled={isSubmitting}
-                  />
-                  <Label htmlFor="el-clasico" className="text-sm font-medium flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-yellow-600" />
-                    El Clásico-tävlingen
-                  </Label>
-                </div>
-
-                {isElClasico && (
-                  <div className="space-y-2">
-                    <Label htmlFor="sales-count" className="text-sm font-medium">
-                      Antal sälj
-                    </Label>
-                    <Input
-                      id="sales-count"
-                      type="number"
-                      placeholder="ex. 2"
-                      value={salesCount}
-                      onChange={(e) => setSalesCount(e.target.value)}
-                      className="h-10"
-                      disabled={isSubmitting}
-                      min="1"
-                      required={isElClasico}
-                    />
-                    <p className="text-xs text-yellow-700">
-                      Antal sälj för El Clásico-tävlingen (1 aug - 30 sep 2025)
-                    </p>
-                  </div>
-                )}
-              </div>
-
               {/* Submit Button */}
               <Button
                 type="submit"
-                disabled={isSubmitting || !sellerName.trim() || !tb.trim() || (isElClasico && !salesCount.trim())}
+                disabled={isSubmitting || !sellerName.trim() || !tb.trim()}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold"
               >
                 {isSubmitting ? (
@@ -280,23 +221,28 @@ const Seller = () => {
               <p className="text-center text-gray-500 py-8">Inga försäljningar registrerade idag</p>
             ) : (
               <div className="space-y-3 max-h-64 overflow-y-auto">
-                {todaysSales.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <p className="font-semibold text-gray-900">{sale.seller_name}</p>
-                      <p className="text-sm text-gray-600">
-                        {sale.amount_tb.toLocaleString('sv-SE')} tb
-                        {sale.sales_count && ` + ${sale.sales_count} sälj`}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(sale.timestamp).toLocaleTimeString('sv-SE', { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                 {todaysSales.map((sale) => (
+                   <div key={sale.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                     <div>
+                       <p className="font-semibold text-gray-900">{sale.seller_name}</p>
+                       <p className="text-sm text-gray-600">
+                         {sale.amount_tb.toLocaleString('sv-SE')} tb
+                       </p>
+                       <p className="text-xs text-gray-500">
+                         {new Date(sale.timestamp).toLocaleTimeString('sv-SE', { 
+                           hour: '2-digit', 
+                           minute: '2-digit' 
+                         })}
+                       </p>
+                     </div>
+                     <SaleDeleteButton
+                       saleId={sale.id}
+                       sellerName={sale.seller_name}
+                       amount={sale.amount_tb}
+                       onDeleted={loadTodaysSales}
+                     />
+                   </div>
+                 ))}
               </div>
             )}
           </CardContent>

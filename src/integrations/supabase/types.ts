@@ -46,7 +46,6 @@ export type Database = {
           amount_tb: number
           created_at: string
           id: string
-          sales_count: number | null
           seller_id: string | null
           seller_name: string
           timestamp: string
@@ -55,7 +54,6 @@ export type Database = {
           amount_tb: number
           created_at?: string
           id?: string
-          sales_count?: number | null
           seller_id?: string | null
           seller_name: string
           timestamp?: string
@@ -64,7 +62,6 @@ export type Database = {
           amount_tb?: number
           created_at?: string
           id?: string
-          sales_count?: number | null
           seller_id?: string | null
           seller_name?: string
           timestamp?: string

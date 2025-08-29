@@ -9,7 +9,6 @@ interface Sale {
   id: string;
   seller_name: string;
   amount_tb: number;
-  sales_count?: number;
   timestamp: string;
   seller_id?: string;
 }
@@ -319,9 +318,6 @@ const Dashboard = () => {
                     </div>
                     <div className="text-center py-2">
                       <p className="text-2xl font-bold text-green-700">{formatCurrency(lastSale.amount_tb)}</p>
-                      {lastSale.sales_count && (
-                        <p className="text-sm text-yellow-600">+ {lastSale.sales_count} sälj (El Clásico)</p>
-                      )}
                     </div>
                   </div>
                 ) : (

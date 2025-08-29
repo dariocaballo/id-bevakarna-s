@@ -4,7 +4,7 @@ import confetti from 'canvas-confetti';
 interface CelebrationOverlayProps {
   sale: {
     seller_name: string;
-    amount: number;
+    amount_tb: number;
     seller_id?: string;
   } | null;
   sellerImage?: string;
@@ -221,7 +221,7 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
             🎉 Grattis {sale.seller_name}!
           </h2>
           <p className="text-lg text-gray-600">
-            Sålde {sale.amount.toLocaleString('sv-SE')} TB!
+            Sålde {sale.amount_tb.toLocaleString('sv-SE')} TB!
           </p>
         </div>
 

@@ -7,10 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface RequestBody {
+interface ReportSaleRequest {
   sellerName: string;
   tb: number;
-  salesCount?: number;
 }
 
 Deno.serve(async (req) => {
@@ -23,10 +22,10 @@ Deno.serve(async (req) => {
 
   try {
     // Parse request body
-    const body: RequestBody = await req.json();
+    const body: ReportSaleRequest = await req.json();
     console.log('📥 Request body:', body);
 
-    const { sellerName, tb, salesCount } = body;
+    const { sellerName, tb } = body;
 
     // Validation
     if (!sellerName || typeof sellerName !== 'string' || sellerName.trim() === '') {
@@ -49,15 +48,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (salesCount !== undefined && (typeof salesCount !== 'number' || salesCount <= 0)) {
-      console.log('❌ Invalid sales count');
-      return new Response(JSON.stringify({ 
-        error: "salesCount måste vara ett tal större än 0 om angivet" 
-      }), { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
 
     // Get environment variables
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -114,7 +104,6 @@ Deno.serve(async (req) => {
     const saleData = {
       seller_name: sellerName.trim(),
       amount_tb: tb,
-      sales_count: salesCount || null,
       seller_id: sellerId,
       timestamp: new Date().toISOString()
     };
