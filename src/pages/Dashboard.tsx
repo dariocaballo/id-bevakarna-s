@@ -28,27 +28,33 @@ const Dashboard = () => {
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   const [currentAudio, setCurrentAudio] = useState<{ soundUrl: string; sellerName: string } | null>(null);
 
-  // Handle new sales with enhanced audio playback and celebration
+  // Handle new sales with immediate celebration
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
     console.log('🎆 DASHBOARD CELEBRATION TRIGGERED!');
     console.log('🎯 Ny försäljning:', `seller=${sale.seller_name}, tb=${sale.amount_tb}`);
     
+    // Always trigger immediate confetti
+    const triggerConfetti = () => {
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+      });
+    };
+
+    // Start confetti immediately
+    triggerConfetti();
+    
     // Play seller's audio if available
     if (seller?.sound_file_url) {
-      console.log(`🎵 Playing sound for ${seller.name}`);
+      console.log(`🎵 Playing sound for ${seller.name}: ${seller.sound_file_url}`);
       setCurrentAudio({ 
         soundUrl: seller.sound_file_url, 
         sellerName: seller.name 
       });
     } else {
-      console.log('🎵 No custom sound, using fallback');
-      // Fallback to default celebration without sound
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
-      });
+      console.log('🎵 No custom sound for seller');
     }
     
     console.log('🎆 Setting celebration sale - overlay should appear now!');
@@ -146,15 +152,8 @@ const Dashboard = () => {
   };
 
   const handleAudioDurationChange = (duration: number) => {
-    console.log(`🎵 Audio duration detected: ${duration}ms`);
-    
-    // Start confetti with the detected duration
-    confetti({
-      particleCount: 120,
-      spread: 80,
-      origin: { y: 0.6 },
-      colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
-    });
+    console.log(`🎵 Audio duration detected: ${duration}s`);
+    // Audio duration received - confetti already triggered immediately in handleNewSale
   };
 
   const handleAudioEnded = () => {

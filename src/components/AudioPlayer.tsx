@@ -19,7 +19,14 @@ export const AudioPlayer = ({ soundUrl, onEnded, onDurationChange, autoPlay = fa
       const duration = audio.duration;
       if (duration && isFinite(duration)) {
         console.log(`🎵 Audio loaded, duration: ${duration}s`);
-        onDurationChange?.(duration * 1000); // Convert to milliseconds
+        onDurationChange?.(duration);
+      }
+    };
+
+    const handleCanPlay = () => {
+      console.log('🎵 Audio can play');
+      if (autoPlay) {
+        playAudio();
       }
     };
 
@@ -30,9 +37,23 @@ export const AudioPlayer = ({ soundUrl, onEnded, onDurationChange, autoPlay = fa
 
     const handleError = (e: Event) => {
       console.error('🎵 Audio error:', e);
+      // Call onEnded even on error to clean up
+      onEnded?.();
+    };
+
+    const playAudio = async () => {
+      try {
+        await audio.play();
+        console.log('🎵 Audio started playing');
+      } catch (error) {
+        console.error('🎵 Failed to play audio (likely autoplay restriction):', error);
+        // Try without user interaction - fallback
+        onEnded?.();
+      }
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
@@ -40,20 +61,9 @@ export const AudioPlayer = ({ soundUrl, onEnded, onDurationChange, autoPlay = fa
     audio.src = soundUrl;
     audio.load();
 
-    if (autoPlay) {
-      const playAudio = async () => {
-        try {
-          await audio.play();
-          console.log('🎵 Audio started playing');
-        } catch (error) {
-          console.error('🎵 Failed to play audio:', error);
-        }
-      };
-      playAudio();
-    }
-
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };

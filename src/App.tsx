@@ -16,8 +16,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard").catch(err => {
   return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda dashboard</p></div> };
 }));
 
-const Seller = lazy(() => import("./pages/Seller").catch(err => {
-  console.error('Failed to load Seller page:', err);
+const Sales = lazy(() => import("./pages/Sales").catch(err => {
+  console.error('Failed to load Sales page:', err);
   return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda säljarsidan</p></div> };
 }));
 
@@ -126,7 +126,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/sales" element={<Seller />} />
+              <Route path="/sales" element={<Sales />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

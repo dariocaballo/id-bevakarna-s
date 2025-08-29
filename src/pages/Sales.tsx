@@ -16,7 +16,7 @@ interface Seller {
   sound_file_url?: string;
 }
 
-const Seller = () => {
+const Sales = () => {
   const [selectedSellerId, setSelectedSellerId] = useState('');
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [tb, setTb] = useState('');
@@ -325,4 +325,4 @@ const Seller = () => {
   );
 };
 
-export default Seller;
+export default Sales;

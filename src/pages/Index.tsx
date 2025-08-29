@@ -9,7 +9,7 @@ const Index = () => {
   useEffect(() => {
     // Preload dashboard and sales pages
     import('./Dashboard');
-    import('./Seller');
+    import('./Sales');
   }, []);
 
   return (
