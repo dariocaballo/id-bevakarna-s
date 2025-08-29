@@ -319,12 +319,12 @@ const Dashboard = () => {
       {/* Audio Manager */}
       {currentAudio && (
         <AudioManager 
-          soundUrl={getVersionedUrl(currentAudio.soundUrl, currentAudio.updatedAt) || currentAudio.soundUrl}
+          soundUrl={currentAudio.soundUrl}
           onEnded={handleAudioEnded}
           onDurationChange={handleAudioDurationChange}
           autoPlay={true}
           sellerName={currentAudio.sellerName}
-          key={`${currentAudio.soundUrl}-${currentAudio.updatedAt || Date.now()}`}
+          key={`${currentAudio.sale.id}-${currentAudio.updatedAt || Date.now()}`}
         />
       )}
     </div>

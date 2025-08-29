@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Volume2, VolumeX } from 'lucide-react';
+import { getVersionedUrl } from '@/utils/media';
 
 interface AudioManagerProps {
   soundUrl?: string;
@@ -165,11 +166,14 @@ export const AudioManager = ({
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
 
-    // Load audio - use the URL as provided (should already have cache busting)
-    audio.src = soundUrl;
+    // Load audio - create versioned URL for cache busting
+    const versionedUrl = soundUrl.includes('?v=') ? soundUrl : `${soundUrl}?v=${Date.now()}`;
+    audio.src = versionedUrl;
     audio.load();
     
-    console.log('🎵 Audio element configured and loading:', soundUrl);
+    console.log('🎵 Audio element configured and loading:');
+    console.log('  - Original URL:', soundUrl);
+    console.log('  - Final URL:', versionedUrl);
 
     return () => {
       isCurrentEffect = false;
@@ -227,32 +231,33 @@ export const AudioManager = ({
         style={{ display: 'none' }}
       />
       
-      {/* User activation button */}
+      {/* User activation button - show prominently */}
       {showActivationButton && (
-        <div className="fixed top-4 right-4 z-[10000] bg-white rounded-lg shadow-lg p-4 border-2 border-blue-500">
-          <div className="flex items-center gap-3">
-            <Volume2 className="w-6 h-6 text-blue-500" />
-            <div>
-              <p className="font-semibold text-sm">Aktivera ljud</p>
-              <p className="text-xs text-gray-600">För bästa upplevelse</p>
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md mx-4 text-center border-4 border-blue-500 animate-pulse">
+            <div className="mb-6">
+              <Volume2 className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Aktivera ljud</h2>
+              <p className="text-gray-600">För att spela upp ljud när en försäljning rapporteras</p>
+              <p className="text-sm text-blue-600 mt-2">Krävs för att fira säljframgångar! 🎉</p>
             </div>
             <Button
               onClick={handleUserActivation}
-              size="sm"
-              className="ml-2"
+              size="lg"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold"
             >
-              Aktivera
+              ▶️ Aktivera ljud
             </Button>
           </div>
         </div>
       )}
       
-      {/* Error display */}
+      {/* Error display - only show critical errors */}
       {audioError && !showActivationButton && (
-        <div className="fixed bottom-4 right-4 z-[10000] bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 rounded">
+        <div className="fixed bottom-4 right-4 z-[10000] bg-red-100 border-l-4 border-red-500 text-red-700 p-3 rounded shadow-lg">
           <div className="flex items-center gap-2">
             <VolumeX className="w-4 h-4" />
-            <span className="text-sm">{audioError}</span>
+            <span className="text-sm font-medium">{audioError}</span>
           </div>
         </div>
       )}
