@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +24,8 @@ const Sales = () => {
   const [todaysSales, setTodaysSales] = useState<any[]>([]);
   const { toast } = useToast();
 
-  const loadSellers = useCallback(async () => {
+  // Load sellers from database
+  const loadSellers = async () => {
     try {
       const { data, error } = await supabase
         .from('sellers')
@@ -34,15 +35,32 @@ const Sales = () => {
       if (error) throw error;
       setSellers(data || []);
     } catch (error) {
+      console.error('Error loading sellers:', error);
       toast({
         title: "Fel",
         description: "Kunde inte ladda säljare",
         variant: "destructive"
       });
     }
-  }, [toast]);
+  };
 
-  const loadTodaysSales = useCallback(async () => {
+  // Load remembered seller selection
+  useEffect(() => {
+    const remembered = localStorage.getItem('selected-seller-id');
+    if (remembered) {
+      setSelectedSellerId(remembered);
+    }
+  }, []);
+
+  // Save seller selection to localStorage
+  useEffect(() => {
+    if (selectedSellerId) {
+      localStorage.setItem('selected-seller-id', selectedSellerId);
+    }
+  }, [selectedSellerId]);
+
+  // Load today's sales
+  const loadTodaysSales = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
@@ -54,37 +72,39 @@ const Sales = () => {
       if (error) throw error;
       setTodaysSales(data || []);
     } catch (error) {
-      // Silent fail for today's sales loading
+      console.error('Error loading sales:', error);
     }
-  }, []);
-
-  useEffect(() => {
-    const remembered = localStorage.getItem('selected-seller-id');
-    if (remembered) {
-      setSelectedSellerId(remembered);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (selectedSellerId) {
-      localStorage.setItem('selected-seller-id', selectedSellerId);
-    }
-  }, [selectedSellerId]);
+  };
 
   useEffect(() => {
     loadSellers();
     loadTodaysSales();
 
+    // Subscribe to realtime changes for both sellers and sales
     const channel = supabase
       .channel('seller-sales-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, loadTodaysSales)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, loadSellers)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales' },
+        () => {
+          console.log('Sales updated in seller page, reloading...');
+          loadTodaysSales();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellers' },
+        () => {
+          console.log('Sellers updated in seller page, reloading...');
+          loadSellers();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadSellers, loadTodaysSales]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +141,12 @@ const Sales = () => {
     setIsSubmitting(true);
 
     try {
+      console.log('🚀 Submitting sale:', {
+        sellerId: selectedSellerId,
+        sellerName: selectedSeller.name,
+        tb: tbNumber
+      });
+
       const { data, error } = await supabase.functions.invoke('report_sale', {
         body: {
           sellerId: selectedSellerId,
@@ -130,17 +156,24 @@ const Sales = () => {
       });
 
       if (error) {
+        console.error('Function error:', error);
         throw new Error(error.message || 'Kunde inte ansluta till servern');
       }
 
+      console.log('✅ Sale reported successfully:', data);
+
+      const description = `${selectedSeller.name} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
+
       toast({
         title: "Försäljning rapporterad! 🎉",
-        description: `${selectedSeller.name} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`,
+        description,
       });
 
+      // Reset form (keep seller selection)
       setTb('');
       
     } catch (error: any) {
+      console.error('❌ Sale reporting failed:', error);
       toast({
         title: "Fel",
         description: error.message || "Kunde inte registrera försäljning",
@@ -154,11 +187,13 @@ const Sales = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 p-4">
       <div className="max-w-2xl mx-auto space-y-6">
+        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">Säljrapportering</h1>
           <p className="text-gray-600">Rapportera dina försäljningar enkelt och snabbt</p>
         </div>
 
+        {/* Main Form */}
         <Card className="shadow-lg border-0">
           <CardHeader className="bg-gradient-to-r from-blue-500 to-green-500 text-white">
             <CardTitle className="text-xl flex items-center gap-2">
@@ -168,6 +203,7 @@ const Sales = () => {
           </CardHeader>
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Seller Selection */}
               <div className="space-y-2">
                 <Label htmlFor="seller-select" className="text-sm font-medium flex items-center gap-2">
                   <User className="w-4 h-4 text-blue-600" />
@@ -204,8 +240,10 @@ const Sales = () => {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500">Ditt val sparas för framtida rapporter</p>
               </div>
 
+              {/* TB Amount */}
               <div className="space-y-2">
                 <Label htmlFor="tb-amount" className="text-sm font-medium flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-green-600" />
@@ -225,6 +263,7 @@ const Sales = () => {
                 />
               </div>
 
+              {/* Submit Button */}
               <Button
                 type="submit"
                 disabled={isSubmitting || !selectedSellerId || !tb.trim()}
@@ -243,6 +282,7 @@ const Sales = () => {
           </CardContent>
         </Card>
 
+        {/* Today's Sales */}
         <Card className="shadow-lg border-0">
           <CardHeader>
             <CardTitle className="text-xl text-gray-700">
