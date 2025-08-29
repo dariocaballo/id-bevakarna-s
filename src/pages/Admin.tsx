@@ -156,26 +156,20 @@ const Admin = () => {
       // Remove old profile images
       if (currentImageUrl) {
         const url = new URL(currentImageUrl);
-        const pathParts = url.pathname.split('/');
-        const filename = pathParts.pop()?.split('?')[0];
+        const filename = url.pathname.split('/').pop()?.split('?')[0];
         if (filename && filename.startsWith(sellerId)) {
-          // Use the correct folder structure
-          const filePathInBucket = `profiles/${filename}`;
-          await supabase.storage.from('seller-profiles').remove([filePathInBucket]);
-          console.log(`✅ Removed old profile image: ${filePathInBucket}`);
+          await supabase.storage.from('seller-profiles').remove([filename]);
+          console.log(`✅ Removed old profile image: ${filename}`);
         }
       }
 
       // Remove old sound files
       if (currentSoundUrl) {
         const url = new URL(currentSoundUrl);
-        const pathParts = url.pathname.split('/');
-        const filename = pathParts.pop()?.split('?')[0];
+        const filename = url.pathname.split('/').pop()?.split('?')[0];
         if (filename && filename.startsWith(sellerId)) {
-          // Use the correct folder structure
-          const filePathInBucket = `sounds/${filename}`;
-          await supabase.storage.from('seller-sounds').remove([filePathInBucket]);
-          console.log(`✅ Removed old sound file: ${filePathInBucket}`);
+          await supabase.storage.from('seller-sounds').remove([filename]);
+          console.log(`✅ Removed old sound file: ${filename}`);
         }
       }
     } catch (error) {
@@ -189,20 +183,15 @@ const Admin = () => {
     if (!changes?.hasChanges) return;
 
     const seller = sellers.find(s => s.id === sellerId);
-    if (!seller) {
-      toast({
-        title: "Fel",
-        description: "Säljare hittades inte i listan",
-        variant: "destructive"
-      });
-      return;
-    }
+    if (!seller) return;
 
     setSavingProgress(prev => ({ ...prev, [sellerId]: true }));
-    console.log(`💾 Starting atomic save process for seller ${sellerId}`);
+    console.log(`💾 Starting save process for seller ${sellerId}`);
 
     try {
       const updates: { profile_image_url?: string; sound_file_url?: string } = {};
+      let newImageUrl = seller.profile_image_url;
+      let newSoundUrl = seller.sound_file_url;
 
       // Upload profile image if selected
       if (changes.profileImage) {
@@ -217,8 +206,10 @@ const Admin = () => {
           throw new Error(`Profilbild: ${uploadResult.error}`);
         }
 
-        updates.profile_image_url = uploadResult.publicUrl;
-        console.log('✅ Profile image uploaded:', uploadResult.publicUrl);
+        const timestamp = Date.now();
+        newImageUrl = `${uploadResult.publicUrl}?v=${timestamp}`;
+        updates.profile_image_url = newImageUrl;
+        console.log('✅ Profile image uploaded:', newImageUrl);
       }
 
       // Upload sound file if selected
@@ -234,55 +225,44 @@ const Admin = () => {
           throw new Error(`Ljudfil: ${uploadResult.error}`);
         }
 
-        updates.sound_file_url = uploadResult.publicUrl;
-        console.log('✅ Sound file uploaded:', uploadResult.publicUrl);
+        const timestamp = Date.now();
+        newSoundUrl = `${uploadResult.publicUrl}?v=${timestamp}`;
+        updates.sound_file_url = newSoundUrl;
+        console.log('✅ Sound file uploaded:', newSoundUrl);
       }
 
-      // Only proceed with database update if we have updates
-      if (Object.keys(updates).length === 0) {
-        console.log('ℹ️ No media updates to save');
-        clearPendingChanges(sellerId);
-        return;
-      }
-
-      // Update database atomically
-      console.log('💾 Updating database atomically...');
+      // Update database
+      console.log('💾 Updating database...');
       const updateResult = await updateSellerMedia(sellerId, updates);
       if (updateResult.error) {
-        throw new Error(updateResult.error);
+        throw new Error(`Databas: ${updateResult.error}`);
       }
 
-      if (!updateResult.data) {
-        throw new Error('Ingen data returnerad från databas - uppdatering misslyckades');
+      // Remove old files after successful save
+      if (Object.keys(updates).length > 0) {
+        await removeOldFiles(
+          sellerId, 
+          changes.profileImage ? seller.profile_image_url : undefined,
+          changes.soundFile ? seller.sound_file_url : undefined
+        );
       }
 
-      // Remove old files after successful database save
-      if (changes.profileImage && seller.profile_image_url) {
-        await removeOldFiles(sellerId, seller.profile_image_url, undefined);
-      }
-      if (changes.soundFile && seller.sound_file_url) {
-        await removeOldFiles(sellerId, undefined, seller.sound_file_url);
-      }
-
-      // Success - update local state with exact database response
+      // Success
       console.log('✅ Save completed successfully');
       toast({
         title: "Sparat!",
-        description: `Ändringar för ${seller.name} har sparats permanent. Live-uppdatering pågår...`
+        description: `Ändringar för ${seller.name} har sparats. Uppdateras live inom 1-2 sekunder.`
       });
 
-      // Clear pending changes immediately
+      // Clear pending changes
       clearPendingChanges(sellerId);
 
-      // Update local state with database response (includes updated_at)
+      // Force immediate local update for instant feedback
       setSellers(prev => prev.map(s => 
-        s.id === sellerId ? updateResult.data : s
+        s.id === sellerId 
+          ? { ...s, ...updates, updated_at: new Date().toISOString() }
+          : s
       ));
-
-      // Force reload to ensure consistency
-      setTimeout(() => {
-        loadSellers();
-      }, 500);
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Okänt fel';
@@ -304,10 +284,8 @@ const Admin = () => {
     setSavingProgress(prev => ({ ...prev, [sellerId]: true }));
     
     try {
-      // Remove from storage first
       await removeOldFiles(sellerId, seller.profile_image_url, undefined);
       
-      // Update database to clear the URL
       const updateResult = await updateSellerMedia(sellerId, {
         profile_image_url: null as any
       });
@@ -317,16 +295,14 @@ const Admin = () => {
 
       toast({ title: "Borttagen", description: "Profilbild har tagits bort" });
       
-      // Update local state with database response
-      if (updateResult.data) {
-        setSellers(prev => prev.map(s => 
-          s.id === sellerId ? updateResult.data : s
-        ));
-      }
+      setSellers(prev => prev.map(seller => 
+        seller.id === sellerId 
+          ? { ...seller, profile_image_url: undefined, updated_at: new Date().toISOString() }
+          : seller
+      ));
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Kunde inte ta bort profilbild';
-      console.error('❌ Delete profile image failed:', error);
       toast({ title: "Fel", description: errorMsg, variant: "destructive" });
     } finally {
       setSavingProgress(prev => ({ ...prev, [sellerId]: false }));
@@ -340,10 +316,8 @@ const Admin = () => {
     setSavingProgress(prev => ({ ...prev, [sellerId]: true }));
     
     try {
-      // Remove from storage first
       await removeOldFiles(sellerId, undefined, seller.sound_file_url);
       
-      // Update database to clear the URL
       const updateResult = await updateSellerMedia(sellerId, {
         sound_file_url: null as any
       });
@@ -353,16 +327,14 @@ const Admin = () => {
 
       toast({ title: "Borttagen", description: "Ljudfil har tagits bort" });
       
-      // Update local state with database response
-      if (updateResult.data) {
-        setSellers(prev => prev.map(s => 
-          s.id === sellerId ? updateResult.data : s
-        ));
-      }
+      setSellers(prev => prev.map(seller => 
+        seller.id === sellerId 
+          ? { ...seller, sound_file_url: undefined, updated_at: new Date().toISOString() }
+          : seller
+      ));
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Kunde inte ta bort ljudfil';
-      console.error('❌ Delete sound file failed:', error);
       toast({ title: "Fel", description: errorMsg, variant: "destructive" });
     } finally {
       setSavingProgress(prev => ({ ...prev, [sellerId]: false }));

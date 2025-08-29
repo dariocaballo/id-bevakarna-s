@@ -32,25 +32,23 @@ export async function uploadToBucket(
   });
 
   try {
-    // Determine folder and filename based on bucket type
-    const isProfileImage = bucketName === 'seller-profiles';
-    const folder = isProfileImage ? 'profiles' : 'sounds';
-    const timestamp = Date.now();
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || (isProfileImage ? 'jpg' : 'mp3');
-    const fileName = `${folder}/${sellerId}-${timestamp}.${fileExt}`;
-
-    console.log(`📤 Uploading file as: ${fileName}`);
-
-    // Remove existing files for this seller first
-    console.log(`🗑️ Checking for existing files in ${bucketName}/${folder}...`);
+    // Remove existing files for this seller
+    console.log(`🗑️ Checking for existing files in ${bucketName}...`);
     const { data: existingFiles, error: listError } = await supabase.storage
       .from(bucketName)
-      .list(folder);
+      .list('');
 
-    if (!listError && existingFiles) {
+    if (listError) {
+      console.error('❌ Error listing files:', listError);
+      throw listError;
+    }
+
+    console.log(`📁 Found ${existingFiles?.length || 0} files in bucket`);
+
+    if (existingFiles) {
       const filesToRemove = existingFiles
         .filter(f => f.name.startsWith(sellerId))
-        .map(f => `${folder}/${f.name}`);
+        .map(f => f.name);
       
       console.log(`🗑️ Files to remove for seller ${sellerId}:`, filesToRemove);
       
@@ -68,11 +66,18 @@ export async function uploadToBucket(
       }
     }
 
+    // Create unique filename with timestamp
+    const timestamp = Date.now();
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || (bucketName.includes('sound') ? 'mp3' : 'jpg');
+    const fileName = `${sellerId}-${timestamp}.${fileExt}`;
+
+    console.log(`📤 Uploading file as: ${fileName}`);
+
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(fileName, file, { 
-        upsert: true,
-        contentType: file.type || (isProfileImage ? 'image/jpeg' : 'audio/mpeg')
+        upsert: false,
+        contentType: file.type || (bucketName.includes('sound') ? 'audio/mpeg' : 'image/jpeg')
       });
 
     if (uploadError) {
@@ -103,14 +108,13 @@ export async function uploadToBucket(
  */
 export async function updateSellerMedia(
   sellerId: string, 
-  updates: { profile_image_url?: string | null; sound_file_url?: string | null }
-): Promise<{ data?: any; error?: string }> {
+  updates: { profile_image_url?: string; sound_file_url?: string }
+): Promise<{ error?: string }> {
   console.log(`💾 Updating seller ${sellerId} in database:`, updates);
   
   try {
     const updateTime = new Date().toISOString();
     
-    // Perform the update directly with proper error handling
     const { data, error } = await supabase
       .from('sellers')
       .update({ 
@@ -118,16 +122,15 @@ export async function updateSellerMedia(
         updated_at: updateTime
       })
       .eq('id', sellerId)
-      .select('*')
-      .single();
+      .select();
 
     if (error) {
       console.error('❌ Database update error:', error);
-      throw new Error(`Databasfel: ${error.message}`);
+      throw error;
     }
     
     console.log('✅ Database updated successfully:', data);
-    return { data };
+    return {};
   } catch (error) {
     console.error('❌ Database update failed:', error);
     return { 
@@ -192,7 +195,7 @@ export function validateAudioFile(file: File): { valid: boolean; error?: string 
 }
 
 /**
- * Create and play audio with proper error handling and cache-busting
+ * Create and play audio with proper error handling
  */
 export function createAudio(url: string): Promise<HTMLAudioElement> {
   console.log(`🎵 Creating audio element for URL:`, url);
@@ -202,13 +205,12 @@ export function createAudio(url: string): Promise<HTMLAudioElement> {
     audio.volume = 0.8;
     audio.preload = 'auto';
     audio.crossOrigin = 'anonymous';
-    audio.currentTime = 0; // Ensure we start from beginning
     
     const onLoadedMetadata = () => {
       console.log('✅ Audio metadata loaded successfully');
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('error', onError);
-      audio.currentTime = 0; // Reset to start
+      audio.currentTime = 0;
       resolve(audio);
     };
     
