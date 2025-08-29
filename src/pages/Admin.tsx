@@ -51,12 +51,41 @@ const Admin = () => {
   useEffect(() => {
     if (isAuthenticated) {
       loadSellers();
+      
+      // Set up real-time subscription for sellers
+      const channel = supabase
+        .channel('admin-sellers-realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sellers' },
+          () => {
+            console.log('Sellers updated, reloading...');
+            loadSellers();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [isAuthenticated]);
 
   const handleProfileImageUpload = async (sellerId: string, file: File) => {
     try {
-      const fileExt = file.name.split('.').pop();
+      // First remove any existing profile image for this seller
+      const { data: existingFiles } = await supabase.storage
+        .from('seller-profiles')
+        .list('profiles', { search: sellerId });
+
+      if (existingFiles && existingFiles.length > 0) {
+        const filesToRemove = existingFiles.map(f => `profiles/${f.name}`);
+        await supabase.storage
+          .from('seller-profiles')
+          .remove(filesToRemove);
+      }
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `profiles/${fileName}`;
 
@@ -86,7 +115,19 @@ const Admin = () => {
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
     try {
-      const fileExt = file.name.split('.').pop();
+      // First remove any existing sound file for this seller
+      const { data: existingFiles } = await supabase.storage
+        .from('seller-sounds')
+        .list('sounds', { search: sellerId });
+
+      if (existingFiles && existingFiles.length > 0) {
+        const filesToRemove = existingFiles.map(f => `sounds/${f.name}`);
+        await supabase.storage
+          .from('seller-sounds')
+          .remove(filesToRemove);
+      }
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `sounds/${fileName}`;
 

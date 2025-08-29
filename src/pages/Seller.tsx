@@ -86,12 +86,18 @@ const Seller = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
-        () => loadTodaysSales()
+        () => {
+          console.log('Sales updated in seller page, reloading...');
+          loadTodaysSales();
+        }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
-        () => loadSellers()
+        () => {
+          console.log('Sellers updated in seller page, reloading...');
+          loadSellers();
+        }
       )
       .subscribe();
 

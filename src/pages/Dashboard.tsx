@@ -78,7 +78,6 @@ const Dashboard = () => {
     totalMonth,
     topSellers,
     todaysSellers,
-    lastSale,
     sellers,
     settings,
     isLoading

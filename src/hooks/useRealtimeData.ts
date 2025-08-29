@@ -17,31 +17,15 @@ interface Seller {
   sound_file_url?: string;
 }
 
-interface DailyChallenge {
-  id: string;
-  title: string;
-  description: string;
-  target_amount: number;
-  is_active: boolean;
-}
-
 interface UseRealtimeDataReturn {
-  // Data states
   totalToday: number;
   totalMonth: number;
   topSellers: Array<{name: string, amount: number, imageUrl?: string}>;
   todaysSellers: Array<{name: string, amount: number, imageUrl?: string}>;
-  lastSale: Sale | null;
   sellers: Seller[];
-  activeChallenges: DailyChallenge[];
   settings: { [key: string]: any };
-  
-  // Loading states
   isLoading: boolean;
-  
-  // Methods
   refreshData: () => Promise<void>;
-  onNewSale?: (sale: Sale, seller?: Seller) => void;
 }
 
 interface UseRealtimeDataOptions {
@@ -59,31 +43,19 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
   const [totalMonth, setTotalMonth] = useState(0);
   const [topSellers, setTopSellers] = useState<Array<{name: string, amount: number, imageUrl?: string}>>([]);
   const [todaysSellers, setTodaysSellers] = useState<Array<{name: string, amount: number, imageUrl?: string}>>([]);
-  const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [sellers, setSellers] = useState<Seller[]>([]);
-  const [activeChallenges, setActiveChallenges] = useState<DailyChallenge[]>([]);
   const [settings, setSettings] = useState<{ [key: string]: any }>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // Refs for managing subscriptions and preventing memory leaks
+  // Refs for managing subscriptions
   const channelRef = useRef<RealtimeChannel | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const watchdogIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const stabilityCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
-  const lastHeartbeatRef = useRef<number>(Date.now());
-  const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 10; // Increased for better resilience
-  const connectionStableRef = useRef(true);
-  const lastDataUpdateRef = useRef<number>(Date.now());
-
-  // Cache ref for sellers to avoid unnecessary re-fetches
   const sellersCache = useRef<Seller[]>([]);
 
   const loadSellers = useCallback(async (): Promise<Seller[]> => {
     try {
-      const { data, error } = await supabase.from('sellers').select('*');
+      const { data, error } = await supabase.from('sellers').select('*').order('name');
       if (error) throw error;
       
       const sellersData = data || [];
@@ -91,11 +63,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       
       if (isMountedRef.current) {
         setSellers(sellersData);
-        console.log('🖼️ Loaded sellers with images:', sellersData.map(s => ({ 
-          name: s.name, 
-          profile_image_url: s.profile_image_url,
-          has_image: !!s.profile_image_url 
-        })));
+        console.log('📋 Loaded sellers:', sellersData.length, 'sellers');
       }
       
       return sellersData;
@@ -107,14 +75,13 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
 
   const loadSalesData = useCallback(async (sellersData?: Seller[]) => {
     try {
-      // Use provided sellers data or cache
       const currentSellers = sellersData || sellersCache.current;
       
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       
-      // Get all sales efficiently
+      // Get all sales
       const { data: allSales, error } = await supabase
         .from('sales')
         .select('*')
@@ -136,12 +103,10 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       });
       
       // Calculate totals
-      const todaysTotal = todaysSales
-        .reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
-      const monthsTotal = monthsSales
-        .reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
+      const todaysTotal = todaysSales.reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
+      const monthsTotal = monthsSales.reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
       
-      // Calculate seller rankings
+      // Calculate seller rankings for the month
       const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
       monthsSales.forEach((sale: Sale) => {
         if (!monthlySellerTotals[sale.seller_name]) {
@@ -160,7 +125,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
           };
         })
         .sort((a, b) => b.amount - a.amount)
-        .slice(0, 5);
+        .slice(0, 10);
       
       // Calculate today's sellers
       const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
@@ -188,128 +153,33 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         setTotalMonth(monthsTotal);
         setTopSellers(topSellersArray);
         setTodaysSellers(todaysSellersArray);
-        
-        if (sales.length > 0) {
-          setLastSale(sales[0]);
-        }
       }
+      
+      console.log('📊 Sales data loaded:', {
+        todaysTotal,
+        monthsTotal,
+        topSellersCount: topSellersArray.length,
+        todaysSellersCount: todaysSellersArray.length
+      });
     } catch (error) {
       console.error('❌ Error loading sales data:', error);
     }
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    // Dashboard settings not implemented yet
-    if (isMountedRef.current) {
-      setSettings({});
-    }
-  }, []);
-
-  const loadChallenges = useCallback(async () => {
-    // Daily challenges not implemented yet
-    if (isMountedRef.current) {
-      setActiveChallenges([]);
-    }
-  }, []);
-
-  // Enhanced watchdog function for 24/7 operation
-  const checkConnectionHealth = useCallback(() => {
-    const now = Date.now();
-    const timeSinceLastHeartbeat = now - lastHeartbeatRef.current;
-    const timeSinceLastDataUpdate = now - lastDataUpdateRef.current;
-    
-    console.log('🔍 Enhanced connection health check:', {
-      timeSinceLastHeartbeat: `${timeSinceLastHeartbeat}ms`,
-      timeSinceLastDataUpdate: `${timeSinceLastDataUpdate}ms`,
-      connectionStable: connectionStableRef.current,
-      reconnectAttempts: reconnectAttemptsRef.current
-    });
-    
-    // Multiple checks for different scenarios
-    const isStaleConnection = timeSinceLastHeartbeat > 90000; // 1.5 minutes
-    const isDataStale = timeSinceLastDataUpdate > 300000; // 5 minutes without any data updates
-    const isConnectionUnstable = !connectionStableRef.current;
-    
-    if (isStaleConnection || isDataStale || isConnectionUnstable) {
-      console.warn('⚠️ Connection health issues detected, initiating recovery...', {
-        staleConnection: isStaleConnection,
-        staleData: isDataStale,
-        unstable: isConnectionUnstable
-      });
-      reconnectRealtime();
-    } else {
-      console.log('✅ Connection health check passed');
-    }
-  }, []);
-
-  // Enhanced reconnect with exponential backoff
-  const reconnectRealtime = useCallback(() => {
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.error('❌ Max reconnection attempts reached, will retry in 60 seconds...');
-      
-      // Reset attempts after extended wait for long-term resilience
-      setTimeout(() => {
-        console.log('🔄 Resetting reconnection attempts after extended wait');
-        reconnectAttemptsRef.current = 0;
-        reconnectRealtime();
-      }, 60000);
-      return;
-    }
-
-    reconnectAttemptsRef.current++;
-    const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30000); // Max 30 seconds
-    
-    console.log(`🔄 Reconnecting realtime subscription (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}) after ${backoffDelay}ms delay`);
-
-    setTimeout(() => {
-      // Clean up existing subscription
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-
-      // Reset connection state
-      connectionStableRef.current = false;
-      lastHeartbeatRef.current = Date.now();
-      lastDataUpdateRef.current = Date.now();
-
-      // Setup new subscription
-      setupRealtimeSubscription();
-    }, backoffDelay);
-  }, []);
-
-  // Enhanced realtime subscription setup for 24/7 operation
   const setupRealtimeSubscription = useCallback(() => {
-    console.log('🔄 Setting up enhanced real-time subscription for 24/7 operation...');
+    console.log('🔄 Setting up real-time subscription...');
     
     channelRef.current = supabase
-      .channel('dashboard-realtime', {
-        config: {
-          presence: { key: 'dashboard' },
-          broadcast: { self: true }
-        }
-      })
+      .channel('dashboard-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         async (payload) => {
-          lastHeartbeatRef.current = Date.now();
-          lastDataUpdateRef.current = Date.now();
-          reconnectAttemptsRef.current = 0; // Reset on successful message
-          connectionStableRef.current = true;
-          
-          console.log('🔊 Sales update received:', payload.eventType, 'at', new Date().toISOString());
+          console.log('🔊 Sales update received:', payload.eventType);
           
           if (payload.eventType === 'INSERT' && isMountedRef.current) {
             const newSale = payload.new as Sale;
-            console.log('🎆 NEW SALE REALTIME UPDATE:', {
-              seller: newSale.seller_name,
-              amount_tb: newSale.amount_tb,
-              timestamp: newSale.timestamp,
-              id: newSale.id
-            });
-            
-            setLastSale(newSale);
+            console.log('🎆 NEW SALE:', newSale.seller_name, newSale.amount_tb, 'tb');
             
             // Find seller and trigger callback
             const seller = sellersCache.current.find(s => 
@@ -317,19 +187,9 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
               s.name.toLowerCase() === newSale.seller_name.toLowerCase()
             );
             
-            console.log('🔍 Seller lookup result:', {
-              found: !!seller,
-              searchedId: newSale.seller_id,
-              searchedName: newSale.seller_name,
-              sellerSoundUrl: seller?.sound_file_url,
-              availableSellers: sellersCache.current.map(s => ({ id: s.id, name: s.name, hasSound: !!s.sound_file_url }))
-            });
-            
             if (onNewSale) {
-              console.log('🎆 CALLING onNewSale callback - DASHBOARD SHOULD CELEBRATE NOW!');
+              console.log('🎆 Triggering celebration!');
               onNewSale(newSale, seller);
-            } else {
-              console.error('❌ NO onNewSale callback provided - CELEBRATIONS WILL NOT WORK!');
             }
           }
           
@@ -341,49 +201,29 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
         async (payload) => {
-          lastHeartbeatRef.current = Date.now();
-          lastDataUpdateRef.current = Date.now();
-          reconnectAttemptsRef.current = 0; // Reset on successful message
-          connectionStableRef.current = true;
-          
-          console.log('👥 Sellers update received:', payload.eventType, 'at', new Date().toISOString());
+          console.log('👥 Sellers update received:', payload.eventType);
           const sellersData = await loadSellers();
           await loadSalesData(sellersData);
           
-          // Notify parent component about seller changes for audio reloading
-          if (onSellerUpdate && payload.eventType === 'UPDATE') {
+          // Notify parent component about seller changes
+          if (onSellerUpdate) {
             onSellerUpdate(sellersData);
           }
         }
       )
       .subscribe((status) => {
-        console.log('📡 Realtime subscription status:', status, 'at', new Date().toISOString());
-        
-        if (status === 'SUBSCRIBED') {
-          lastHeartbeatRef.current = Date.now();
-          lastDataUpdateRef.current = Date.now();
-          reconnectAttemptsRef.current = 0;
-          connectionStableRef.current = true;
-          console.log('✅ Successfully subscribed to realtime updates for 24/7 operation');
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          connectionStableRef.current = false;
-          console.error('❌ Realtime subscription error:', status, 'will attempt reconnection');
-          setTimeout(reconnectRealtime, 2000); // Quick retry for immediate issues
-        }
+        console.log('📡 Realtime subscription status:', status);
       });
-  }, [loadSalesData, loadSellers, loadSettings, loadChallenges, onNewSale, onSellerUpdate, reconnectRealtime]);
+  }, [loadSalesData, loadSellers, onNewSale, onSellerUpdate]);
 
   const refreshData = useCallback(async () => {
     console.log('🔄 Refreshing all data...');
     const sellersData = await loadSellers();
-    await Promise.all([
-      loadSalesData(sellersData),
-      loadSettings(),
-      loadChallenges()
-    ]);
+    await loadSalesData(sellersData);
+    setSettings({}); // No settings implemented yet
     setIsLoading(false);
     console.log('✅ Data refresh complete');
-  }, [loadSellers, loadSalesData, loadSettings, loadChallenges]);
+  }, [loadSellers, loadSalesData]);
 
   // Initialize data and setup real-time subscriptions
   useEffect(() => {
@@ -395,72 +235,13 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
     // Setup real-time subscription
     setupRealtimeSubscription();
 
-    // Setup auto-refresh interval with shorter intervals for critical updates
+    // Setup auto-refresh interval if enabled
     if (enableAutoRefresh) {
       refreshIntervalRef.current = setInterval(() => {
-        console.log('⏰ Auto-refreshing data for 24/7 stability...');
-        lastDataUpdateRef.current = Date.now();
+        console.log('⏰ Auto-refreshing data...');
         loadSalesData();
-      }, Math.min(refreshInterval, 15000)); // Max 15 seconds for TV displays
+      }, refreshInterval);
     }
-
-    // Setup enhanced watchdog timer - check every 45 seconds for 24/7 operation
-    watchdogIntervalRef.current = setInterval(checkConnectionHealth, 45000);
-
-    // Enhanced heartbeat for 24/7 operation - every 20 seconds
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (channelRef.current && connectionStableRef.current) {
-        console.log('💓 Sending heartbeat to maintain 24/7 connection...');
-        // Send a broadcast to keep connection alive
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'heartbeat',
-          payload: { 
-            timestamp: Date.now(),
-            dashboard_id: 'main',
-            uptime: Date.now() - lastDataUpdateRef.current
-          }
-        });
-      }
-    }, 20000); // More frequent heartbeat for TV displays
-
-    // Additional stability check every 5 minutes for aggressive long-term operation
-    stabilityCheckIntervalRef.current = setInterval(() => {
-      console.log('🛡️ Performing deep stability check for 24/7 operation...');
-      
-      // Force refresh if no updates in last 15 minutes (reduced from 30)
-      const timeSinceLastUpdate = Date.now() - lastDataUpdateRef.current;
-      if (timeSinceLastUpdate > 15 * 60 * 1000) {
-        console.warn('⚠️ No updates for 15 minutes, forcing aggressive refresh...');
-        // Force reconnect and refresh
-        reconnectRealtime();
-        setTimeout(() => refreshData(), 2000);
-      }
-      
-      // Check if subscription is still active with more detailed logging
-      if (!channelRef.current) {
-        console.warn('⚠️ No channel reference, reconnecting...');
-        reconnectRealtime();
-      } else if (channelRef.current.state !== 'joined') {
-        console.warn(`⚠️ Subscription not in joined state (current: ${channelRef.current.state}), reconnecting...`);
-        reconnectRealtime();
-      } else {
-        console.log('✅ WebSocket channel healthy:', channelRef.current.state);
-        
-        // Send test broadcast to verify connection
-        try {
-          channelRef.current.send({
-            type: 'broadcast',
-            event: 'stability_test',
-            payload: { timestamp: Date.now() }
-          });
-          console.log('✅ Stability test broadcast sent successfully');
-        } catch (error) {
-          console.warn('⚠️ Stability test broadcast failed:', error);
-          reconnectRealtime();
-        }
-      }
-    }, 5 * 60 * 1000); // More frequent checks every 5 minutes
 
     // Cleanup function
     return () => {
@@ -469,39 +250,20 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
       }
       
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
-
-      if (watchdogIntervalRef.current) {
-        clearInterval(watchdogIntervalRef.current);
-        watchdogIntervalRef.current = null;
-      }
-
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-        heartbeatIntervalRef.current = null;
-      }
-
-      if (stabilityCheckIntervalRef.current) {
-        clearInterval(stabilityCheckIntervalRef.current);
-        stabilityCheckIntervalRef.current = null;
       }
     };
-  }, [refreshData, setupRealtimeSubscription, checkConnectionHealth, enableAutoRefresh, refreshInterval, loadSalesData]);
+  }, [refreshData, setupRealtimeSubscription, enableAutoRefresh, refreshInterval, loadSalesData]);
 
   return {
     totalToday,
     totalMonth,
     topSellers,
     todaysSellers,
-    lastSale,
     sellers,
-    activeChallenges,
     settings,
     isLoading,
     refreshData
