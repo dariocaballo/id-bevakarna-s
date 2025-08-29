@@ -109,12 +109,25 @@ export async function uploadToBucket(
 export async function updateSellerMedia(
   sellerId: string, 
   updates: { profile_image_url?: string; sound_file_url?: string }
-): Promise<{ error?: string }> {
+): Promise<{ data?: any; error?: string }> {
   console.log(`💾 Updating seller ${sellerId} in database:`, updates);
   
   try {
     const updateTime = new Date().toISOString();
     
+    // First, verify the seller exists
+    const { data: existingSeller, error: selectError } = await supabase
+      .from('sellers')
+      .select('id, name')
+      .eq('id', sellerId)
+      .single();
+      
+    if (selectError || !existingSeller) {
+      console.error('❌ Seller not found:', selectError);
+      throw new Error('Säljare hittades inte');
+    }
+    
+    // Perform the update with proper error handling
     const { data, error } = await supabase
       .from('sellers')
       .update({ 
@@ -122,15 +135,16 @@ export async function updateSellerMedia(
         updated_at: updateTime
       })
       .eq('id', sellerId)
-      .select();
+      .select('*')
+      .single();
 
     if (error) {
       console.error('❌ Database update error:', error);
-      throw error;
+      throw new Error(`Databasfel: ${error.message}`);
     }
     
     console.log('✅ Database updated successfully:', data);
-    return {};
+    return { data };
   } catch (error) {
     console.error('❌ Database update failed:', error);
     return { 

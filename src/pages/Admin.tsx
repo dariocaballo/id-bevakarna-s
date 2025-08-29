@@ -238,6 +238,11 @@ const Admin = () => {
         throw new Error(`Databas: ${updateResult.error}`);
       }
 
+      // Verify the update was successful
+      if (!updateResult.data) {
+        throw new Error('Uppdatering misslyckades - ingen data returnerad');
+      }
+
       // Remove old files after successful save
       if (Object.keys(updates).length > 0) {
         await removeOldFiles(
@@ -257,12 +262,15 @@ const Admin = () => {
       // Clear pending changes
       clearPendingChanges(sellerId);
 
-      // Force immediate local update for instant feedback
+      // Update local state with the returned data from database
       setSellers(prev => prev.map(s => 
         s.id === sellerId 
-          ? { ...s, ...updates, updated_at: new Date().toISOString() }
+          ? updateResult.data
           : s
       ));
+
+      // Force reload from database to ensure consistency
+      await loadSellers();
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Okänt fel';
