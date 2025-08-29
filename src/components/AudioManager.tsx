@@ -25,34 +25,50 @@ export const AudioManager = ({
     if (!soundUrl || !audioRef.current) return;
 
     const audio = audioRef.current;
+    let isCurrentEffect = true;
     
     const handleLoadedMetadata = () => {
+      if (!isCurrentEffect) return;
+      
+      // Always reset to start and report duration
+      audio.currentTime = 0;
       const duration = audio.duration;
       if (duration && isFinite(duration)) {
         onDurationChange?.(duration);
       }
-    };
-
-    const handleCanPlay = async () => {
+      
+      // Auto-play after metadata is loaded
       if (autoPlay) {
-        await attemptPlay();
+        attemptPlay();
       }
     };
 
+    const handleCanPlayThrough = () => {
+      if (!isCurrentEffect) return;
+      // Ensure we're at the beginning
+      audio.currentTime = 0;
+    };
+
     const handleEnded = () => {
+      if (!isCurrentEffect) return;
       setShowActivationButton(false);
+      setAudioError(null);
       onEnded?.();
     };
 
-    const handleError = () => {
+    const handleError = (e: Event) => {
+      if (!isCurrentEffect) return;
       setAudioError('Ljudfilen kunde inte laddas');
-      onEnded?.();
+      setTimeout(() => onEnded?.(), 100);
     };
 
     const attemptPlay = async () => {
-      if (!audio) return;
+      if (!audio || !isCurrentEffect) return;
       
       try {
+        // Ensure we start from the beginning
+        audio.currentTime = 0;
+        
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           await playPromise;
@@ -60,6 +76,8 @@ export const AudioManager = ({
           setAudioError(null);
         }
       } catch (error: any) {
+        if (!isCurrentEffect) return;
+        
         if (error.name === 'NotAllowedError') {
           setShowActivationButton(true);
           setAudioError('Klicka för att aktivera ljud');
@@ -70,29 +88,32 @@ export const AudioManager = ({
       }
     };
 
-    // Reset audio for each new sound
+    // Reset audio state
+    audio.pause();
     audio.currentTime = 0;
     audio.volume = 0.8;
+    audio.preload = 'metadata';
     
+    // Set up event listeners
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('canplaythrough', handleCanPlayThrough);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
-    // Load with cache busting
-    audio.src = soundUrl.includes('?') ? `${soundUrl}&cb=${Date.now()}` : `${soundUrl}?cb=${Date.now()}`;
-    audio.preload = 'auto';
+    // Load audio - use original URL with existing cache busting
+    audio.src = soundUrl;
     audio.load();
 
     return () => {
+      isCurrentEffect = false;
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('canplaythrough', handleCanPlayThrough);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
       audio.pause();
       audio.currentTime = 0;
     };
-  }, [soundUrl, onEnded, onDurationChange, autoPlay, sellerName]);
+  }, [soundUrl, onEnded, onDurationChange, autoPlay]);
 
   const handleUserActivation = async () => {
     if (!audioRef.current) return;
@@ -100,12 +121,14 @@ export const AudioManager = ({
     const audio = audioRef.current;
     
     try {
+      // Ensure we start from the beginning
+      audio.currentTime = 0;
       await audio.play();
       setShowActivationButton(false);
       setAudioError(null);
     } catch (error) {
       setAudioError('Kan inte spela ljud');
-      onEnded?.();
+      setTimeout(() => onEnded?.(), 100);
     }
   };
 

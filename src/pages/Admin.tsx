@@ -70,14 +70,24 @@ const Admin = () => {
 
   const handleProfileImageUpload = async (sellerId: string, file: File) => {
     try {
-      // First remove any existing profile image for this seller
+      // Validate file type and size
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        throw new Error('Ogiltigt bildformat. Använd JPG, PNG eller WebP.');
+      }
+      
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        throw new Error('Bilden är för stor. Max 5MB tillåtet.');
+      }
+
+      // Remove existing profile images for this seller
       const { data: existingFiles } = await supabase.storage
         .from('seller-profiles')
         .list('profiles');
 
       if (existingFiles) {
         const filesToRemove = existingFiles
-          .filter(f => f.name.includes(sellerId))
+          .filter(f => f.name.startsWith(sellerId))
           .map(f => `profiles/${f.name}`);
         
         if (filesToRemove.length > 0) {
@@ -87,13 +97,15 @@ const Admin = () => {
         }
       }
 
-      const fileExt = file.name.split('.').pop()?.toLowerCase();
-      const fileName = `${sellerId}.${fileExt}`;
+      // Create unique filename with timestamp
+      const timestamp = Date.now();
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${sellerId}-${timestamp}.${fileExt}`;
       const filePath = `profiles/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('seller-profiles')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, file, { upsert: false });
 
       if (uploadError) throw uploadError;
 
@@ -101,41 +113,52 @@ const Admin = () => {
         .from('seller-profiles')
         .getPublicUrl(filePath);
 
-      // Add cache busting timestamp
-      const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`;
+      // Update seller with new image URL and timestamp for cache busting
+      const updateTime = new Date().toISOString();
+      const cacheBustedUrl = `${publicUrl}?v=${timestamp}`;
 
       const { error: updateError } = await supabase.from('sellers')
         .update({ 
           profile_image_url: cacheBustedUrl,
-          updated_at: new Date().toISOString()
+          updated_at: updateTime
         })
         .eq('id', sellerId);
 
       if (updateError) throw updateError;
 
-      toast({ title: "Framgång", description: "Profilbild uppladdad!" });
-      loadSellers();
+      toast({ title: "Framgång", description: "Profilbild uppladdad och sparad!" });
     } catch (error) {
-      toast({ title: "Fel", description: "Kunde inte ladda upp profilbild", variant: "destructive" });
+      const errorMsg = error instanceof Error ? error.message : 'Kunde inte ladda upp profilbild';
+      toast({ title: "Fel", description: errorMsg, variant: "destructive" });
     }
   };
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
     try {
-      // Validate file type
+      // Validate file type and size
       const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
-      if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.mp3')) {
+      const fileName = file.name.toLowerCase();
+      const isValidType = validTypes.includes(file.type) || 
+                         fileName.endsWith('.mp3') || 
+                         fileName.endsWith('.wav') || 
+                         fileName.endsWith('.ogg');
+      
+      if (!isValidType) {
         throw new Error('Ogiltigt filformat. Använd MP3, WAV eller OGG.');
       }
       
-      // First remove any existing sound file for this seller
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        throw new Error('Ljudfilen är för stor. Max 10MB tillåtet.');
+      }
+      
+      // Remove existing sound files for this seller
       const { data: existingFiles } = await supabase.storage
         .from('seller-sounds')
         .list('sounds');
 
       if (existingFiles) {
         const filesToRemove = existingFiles
-          .filter(f => f.name.includes(sellerId))
+          .filter(f => f.name.startsWith(sellerId))
           .map(f => `sounds/${f.name}`);
         
         if (filesToRemove.length > 0) {
@@ -145,13 +168,15 @@ const Admin = () => {
         }
       }
 
+      // Create unique filename with timestamp  
+      const timestamp = Date.now();
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp3';
-      const fileName = `${sellerId}.${fileExt}`;
-      const filePath = `sounds/${fileName}`;
+      const uniqueFileName = `${sellerId}-${timestamp}.${fileExt}`;
+      const filePath = `sounds/${uniqueFileName}`;
 
-      const { error: uploadError, data: uploadData } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('seller-sounds')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, file, { upsert: false });
 
       if (uploadError) {
         throw uploadError;
@@ -161,12 +186,11 @@ const Admin = () => {
         .from('seller-sounds')
         .getPublicUrl(filePath);
 
-      // Add cache busting timestamp
+      // Update seller with new sound URL and timestamp for cache busting
       const updateTime = new Date().toISOString();
-      const timestampForCache = new Date(updateTime).getTime();
-      const cacheBustedUrl = `${publicUrl}?v=${timestampForCache}`;
+      const cacheBustedUrl = `${publicUrl}?v=${timestamp}`;
 
-      const { error: updateError, data: updateData } = await supabase.from('sellers')
+      const { error: updateError } = await supabase.from('sellers')
         .update({ 
           sound_file_url: cacheBustedUrl,
           updated_at: updateTime
@@ -179,17 +203,15 @@ const Admin = () => {
 
       toast({ 
         title: "Framgång", 
-        description: `Ljudfil ${file.name} uppladdad och redo att spelas!`,
-        duration: 5000
+        description: `Ljudfil ${file.name} uppladdad och redo att spelas!`
       });
       
-      await loadSellers();
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Okänt fel';
       toast({
         title: "Fel", 
-        description: `Kunde inte ladda upp ljudfil: ${error instanceof Error ? error.message : 'Okänt fel'}`, 
-        variant: "destructive",
-        duration: 8000
+        description: `Kunde inte ladda upp ljudfil: ${errorMsg}`, 
+        variant: "destructive"
       });
     }
   };
