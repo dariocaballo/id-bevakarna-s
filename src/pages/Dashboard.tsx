@@ -53,8 +53,12 @@ const Dashboard = () => {
         soundUrl: seller.sound_file_url, 
         sellerName: seller.name 
       });
+      // Reset duration for new audio
+      setCelebrationAudioDuration(undefined);
     } else {
       console.log('🎵 No custom sound for seller');
+      // No audio, use default 3 second duration
+      setCelebrationAudioDuration(3000);
     }
     
     console.log('🎆 Setting celebration sale - overlay should appear now!');
@@ -153,12 +157,14 @@ const Dashboard = () => {
 
   const handleAudioDurationChange = (duration: number) => {
     console.log(`🎵 Audio duration detected: ${duration}s`);
-    // Audio duration received - confetti already triggered immediately in handleNewSale
+    // Convert duration from seconds to milliseconds for celebration overlay
+    setCelebrationAudioDuration(duration * 1000);
   };
 
   const handleAudioEnded = () => {
     console.log('🎵 Audio playback completed');
     setCurrentAudio(null);
+    setCelebrationAudioDuration(undefined);
   };
 
   // Get seller info for celebration
@@ -194,6 +200,7 @@ const Dashboard = () => {
             console.log('✅ Celebration end');
             setCelebrationSale(null);
             setCelebrationAudioDuration(undefined);
+            setCurrentAudio(null);
           }}
           showBubble={settings.show_bubble !== false}
           showConfetti={settings.show_confetti !== false}

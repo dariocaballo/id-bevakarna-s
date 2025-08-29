@@ -43,22 +43,31 @@ export const AudioPlayer = ({ soundUrl, onEnded, onDurationChange, autoPlay = fa
 
     const playAudio = async () => {
       try {
-        await audio.play();
-        console.log('🎵 Audio started playing');
+        console.log('🎵 Attempting to play audio:', soundUrl);
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          console.log('🎵 Audio started playing successfully');
+        }
       } catch (error) {
-        console.error('🎵 Failed to play audio (likely autoplay restriction):', error);
-        // Try without user interaction - fallback
+        console.error('🎵 Failed to play audio:', error);
+        // Still call onEnded to clean up the celebration
         onEnded?.();
       }
     };
 
+    // Reset audio for each new sound
+    audio.currentTime = 0;
+    
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('canplay', handleCanPlay);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
-    // Load the audio
-    audio.src = soundUrl;
+    // Load the audio with cache busting
+    const cacheBustedUrl = soundUrl.includes('?') ? `${soundUrl}&t=${Date.now()}` : `${soundUrl}?t=${Date.now()}`;
+    audio.src = cacheBustedUrl;
+    audio.preload = 'auto';
     audio.load();
 
     return () => {
@@ -66,6 +75,9 @@ export const AudioPlayer = ({ soundUrl, onEnded, onDurationChange, autoPlay = fa
       audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
+      // Pause and reset audio on cleanup
+      audio.pause();
+      audio.currentTime = 0;
     };
   }, [soundUrl, onEnded, onDurationChange, autoPlay]);
 

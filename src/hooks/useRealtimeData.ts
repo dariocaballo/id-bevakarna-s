@@ -256,7 +256,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [refreshData, setupRealtimeSubscription, enableAutoRefresh, refreshInterval, loadSalesData]);
+  }, []);
 
   return {
     totalToday,

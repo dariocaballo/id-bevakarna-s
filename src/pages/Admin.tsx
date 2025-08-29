@@ -130,6 +130,14 @@ const Admin = () => {
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
     try {
+      console.log('🎵 Starting sound file upload for seller:', sellerId, 'File:', file.name, 'Size:', file.size);
+      
+      // Validate file type
+      const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
+      if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.mp3')) {
+        throw new Error('Ogiltigt filformat. Använd MP3, WAV eller OGG.');
+      }
+      
       // First remove any existing sound file for this seller
       const { data: existingFiles } = await supabase.storage
         .from('seller-sounds')
@@ -148,16 +156,21 @@ const Admin = () => {
         }
       }
 
-      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp3';
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `sounds/${fileName}`;
 
       console.log('📤 Uploading sound file:', filePath);
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError, data: uploadData } = await supabase.storage
         .from('seller-sounds')
         .upload(filePath, file, { upsert: true });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('❌ Upload error:', uploadError);
+        throw uploadError;
+      }
+      
+      console.log('✅ File uploaded successfully:', uploadData);
 
       const { data: { publicUrl } } = supabase.storage
         .from('seller-sounds')
@@ -168,20 +181,36 @@ const Admin = () => {
       
       console.log('🔗 Generated sound URL:', cacheBustedUrl);
 
-      const { error: updateError } = await supabase.from('sellers')
+      const { error: updateError, data: updateData } = await supabase.from('sellers')
         .update({ 
           sound_file_url: cacheBustedUrl,
           updated_at: new Date().toISOString()
         })
         .eq('id', sellerId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('❌ Database update error:', updateError);
+        throw updateError;
+      }
+      
+      console.log('✅ Database updated successfully:', updateData);
 
-      toast({ title: "Framgång", description: "Ljudfil uppladdad och redo att spelas!" });
-      loadSellers();
+      toast({ 
+        title: "Framgång", 
+        description: `Ljudfil ${file.name} uppladdad och redo att spelas!`,
+        duration: 5000
+      });
+      
+      // Force reload to see changes immediately
+      await loadSellers();
     } catch (error) {
       console.error('❌ Error uploading sound file:', error);
-      toast({ title: "Fel", description: "Kunde inte ladda upp ljudfil", variant: "destructive" });
+      toast({ 
+        title: "Fel", 
+        description: `Kunde inte ladda upp ljudfil: ${error instanceof Error ? error.message : 'Okänt fel'}`, 
+        variant: "destructive",
+        duration: 8000
+      });
     }
   };
 
@@ -301,10 +330,13 @@ const Admin = () => {
                         
                         <input
                           type="file"
-                          accept="audio/*"
+                          accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (file) handleSoundFileUpload(seller.id, file);
+                            if (file) {
+                              console.log('🎵 File selected:', file.name, file.type, file.size);
+                              handleSoundFileUpload(seller.id, file);
+                            }
                           }}
                           className="hidden"
                           id={`sound-${seller.id}`}
