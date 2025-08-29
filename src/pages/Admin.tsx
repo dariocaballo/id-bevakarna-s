@@ -145,16 +145,25 @@ const Admin = () => {
   };
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
+    console.log(`🎵 Admin: Starting MP3 upload for seller ${sellerId}:`, {
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size
+    });
+
     setProgress(sellerId, 'audio', true);
     
     try {
       // Validate file
+      console.log('🔍 Admin: Validating audio file...');
       const validation = validateAudioFile(file);
       if (!validation.valid) {
+        console.error('❌ Admin: Audio validation failed:', validation.error);
         throw new Error(validation.error);
       }
 
       const sellerName = sellers.find(s => s.id === sellerId)?.name || 'okänd säljare';
+      console.log(`✅ Admin: Audio validation passed for ${sellerName}`);
       
       toast({
         title: "Uppladdning påbörjad",
@@ -162,21 +171,27 @@ const Admin = () => {
       });
 
       // Upload to bucket
+      console.log('📤 Admin: Uploading to seller-sounds bucket...');
       const uploadResult = await uploadToBucket('seller-sounds', file, sellerId);
       if (uploadResult.error) {
+        console.error('❌ Admin: Upload failed:', uploadResult.error);
         throw new Error(uploadResult.error);
       }
+      console.log('✅ Admin: Upload successful, URL:', uploadResult.publicUrl);
 
       // Update database with cache-busting timestamp
       const timestamp = Date.now();
       const cacheBustedUrl = `${uploadResult.publicUrl}?v=${timestamp}`;
       
+      console.log('💾 Admin: Updating database with URL:', cacheBustedUrl);
       const updateResult = await updateSellerMedia(sellerId, {
         sound_file_url: cacheBustedUrl
       });
       if (updateResult.error) {
+        console.error('❌ Admin: Database update failed:', updateResult.error);
         throw new Error(updateResult.error);
       }
+      console.log('✅ Admin: Database updated successfully');
 
       toast({ 
         title: "Framgång", 
@@ -192,6 +207,7 @@ const Admin = () => {
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Okänt fel';
+      console.error('❌ Admin: MP3 upload failed:', errorMsg);
       toast({
         title: "Fel", 
         description: `Kunde inte ladda upp ljudfil: ${errorMsg}`, 
@@ -454,10 +470,20 @@ const Admin = () => {
                         {/* Image Upload */}
                         <input
                           type="file"
-                          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+                          accept="image/*,.png,.jpg,.jpeg,.webp,.gif"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (file) handleProfileImageUpload(seller.id, file);
+                            console.log('🖼️ Admin: Image file selected:', {
+                              file: file?.name,
+                              type: file?.type,
+                              size: file?.size,
+                              sellerId: seller.id
+                            });
+                            if (file) {
+                              handleProfileImageUpload(seller.id, file);
+                            }
+                            // Reset input so same file can be selected again
+                            e.target.value = '';
                           }}
                           className="hidden"
                           id={`profile-${seller.id}`}
@@ -489,10 +515,22 @@ const Admin = () => {
                         {/* Audio Upload */}
                         <input
                           type="file"
-                          accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,.mp3,.wav,.ogg"
+                          accept="audio/*,.mp3,.wav,.ogg"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (file) handleSoundFileUpload(seller.id, file);
+                            console.log('🎵 Admin: File selected for upload:', {
+                              file: file?.name,
+                              type: file?.type,
+                              size: file?.size,
+                              sellerId: seller.id
+                            });
+                            if (file) {
+                              handleSoundFileUpload(seller.id, file);
+                            } else {
+                              console.log('❌ Admin: No file selected');
+                            }
+                            // Reset input so same file can be selected again
+                            e.target.value = '';
                           }}
                           className="hidden"
                           id={`sound-${seller.id}`}
