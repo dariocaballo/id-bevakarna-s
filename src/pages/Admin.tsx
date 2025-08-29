@@ -193,43 +193,43 @@ const Admin = () => {
       let newImageUrl = seller.profile_image_url;
       let newSoundUrl = seller.sound_file_url;
 
-      // Upload profile image if selected
-      if (changes.profileImage) {
-        console.log('📤 Uploading profile image...');
-        toast({
-          title: "Sparar...",
-          description: `Laddar upp profilbild för ${seller.name}...`
-        });
+        // Upload profile image if selected
+        if (changes.profileImage) {
+          console.log('📤 Uploading profile image...');
+          toast({
+            title: "Sparar...",
+            description: `Laddar upp profilbild för ${seller.name}...`
+          });
 
-        const uploadResult = await uploadToBucket('seller-profiles', changes.profileImage, sellerId);
-        if (uploadResult.error) {
-          throw new Error(`Profilbild: ${uploadResult.error}`);
+          const uploadResult = await uploadToBucket('seller-profiles', changes.profileImage, sellerId);
+          if (uploadResult.error) {
+            throw new Error(`Profilbild: ${uploadResult.error}`);
+          }
+
+          // Don't add timestamp here - let DB updated_at handle cache busting
+          newImageUrl = uploadResult.publicUrl;
+          updates.profile_image_url = newImageUrl;
+          console.log('✅ Profile image uploaded:', newImageUrl);
         }
 
-        const timestamp = Date.now();
-        newImageUrl = `${uploadResult.publicUrl}?v=${timestamp}`;
-        updates.profile_image_url = newImageUrl;
-        console.log('✅ Profile image uploaded:', newImageUrl);
-      }
+        // Upload sound file if selected
+        if (changes.soundFile) {
+          console.log('📤 Uploading sound file...');
+          toast({
+            title: "Sparar...",
+            description: `Laddar upp ljudfil för ${seller.name}...`
+          });
 
-      // Upload sound file if selected
-      if (changes.soundFile) {
-        console.log('📤 Uploading sound file...');
-        toast({
-          title: "Sparar...",
-          description: `Laddar upp ljudfil för ${seller.name}...`
-        });
+          const uploadResult = await uploadToBucket('seller-sounds', changes.soundFile, sellerId);
+          if (uploadResult.error) {
+            throw new Error(`Ljudfil: ${uploadResult.error}`);
+          }
 
-        const uploadResult = await uploadToBucket('seller-sounds', changes.soundFile, sellerId);
-        if (uploadResult.error) {
-          throw new Error(`Ljudfil: ${uploadResult.error}`);
+          // Don't add timestamp here - let DB updated_at handle cache busting
+          newSoundUrl = uploadResult.publicUrl;
+          updates.sound_file_url = newSoundUrl;
+          console.log('✅ Sound file uploaded:', newSoundUrl);
         }
-
-        const timestamp = Date.now();
-        newSoundUrl = `${uploadResult.publicUrl}?v=${timestamp}`;
-        updates.sound_file_url = newSoundUrl;
-        console.log('✅ Sound file uploaded:', newSoundUrl);
-      }
 
       // Update database atomically
       console.log('💾 Updating database...');
@@ -249,22 +249,22 @@ const Admin = () => {
         );
       }
 
-      // Success
-      console.log('✅ Save completed successfully');
-      toast({
-        title: "Sparat!",
-        description: `Ändringar för ${seller.name} har sparats. Uppdateras live inom 1-2 sekunder.`
-      });
+        // Success
+        console.log('✅ Save completed successfully');
+        toast({
+          title: "Sparat!",
+          description: `Ändringar för ${seller.name} har sparats permanent. Uppdateras live inom 1-2 sekunder.`
+        });
 
-      // Clear pending changes
-      clearPendingChanges(sellerId);
+        // Clear pending changes immediately
+        clearPendingChanges(sellerId);
 
-      // Update local state with DB values (not local updates)
-      if (updatedSeller) {
-        setSellers(prev => prev.map(s => 
-          s.id === sellerId ? updatedSeller : s
-        ));
-      }
+        // Update local state with DB values for instant feedback
+        if (updatedSeller) {
+          setSellers(prev => prev.map(s => 
+            s.id === sellerId ? updatedSeller : s
+          ));
+        }
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Okänt fel';
