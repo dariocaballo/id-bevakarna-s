@@ -129,7 +129,7 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
                 
                 {/* Fallback initials */}
                 <div 
-                  className={`w-full h-full flex items-center justify-center ${sellerImage ? 'hidden' : 'flex'}`}
+                  className="w-full h-full flex items-center justify-center"
                   style={{ display: sellerImage ? 'none' : 'flex' }}
                 >
                   <span className="text-2xl font-bold text-green-700">

@@ -7,12 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Upload, Volume2 } from 'lucide-react';
+import { validateImageFile, validateAudioFile, uploadToBucket, updateSellerMedia, getVersionedUrl, createAudio } from '@/utils/media';
 
 interface Seller {
   id: string;
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
+  updated_at?: string;
 }
 
 const Admin = () => {
@@ -70,69 +72,25 @@ const Admin = () => {
 
   const handleProfileImageUpload = async (sellerId: string, file: File) => {
     try {
-      // Validate file type and size - PNG is explicitly supported
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-      const imageFileName = file.name.toLowerCase();
-      const isValidType = validTypes.includes(file.type) || 
-                         imageFileName.endsWith('.png') || 
-                         imageFileName.endsWith('.jpg') || 
-                         imageFileName.endsWith('.jpeg') || 
-                         imageFileName.endsWith('.webp') ||
-                         imageFileName.endsWith('.gif');
-      
-      if (!isValidType) {
-        throw new Error('Ogiltigt bildformat. Använd JPG, PNG, WebP eller GIF.');
-      }
-      
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        throw new Error('Bilden är för stor. Max 5MB tillåtet.');
+      // Validate file
+      const validation = validateImageFile(file);
+      if (!validation.valid) {
+        throw new Error(validation.error);
       }
 
-      // Remove existing profile images for this seller
-      const { data: existingFiles } = await supabase.storage
-        .from('seller-profiles')
-        .list('profiles');
-
-      if (existingFiles) {
-        const filesToRemove = existingFiles
-          .filter(f => f.name.startsWith(sellerId))
-          .map(f => `profiles/${f.name}`);
-        
-        if (filesToRemove.length > 0) {
-          await supabase.storage
-            .from('seller-profiles')
-            .remove(filesToRemove);
-        }
+      // Upload to bucket
+      const uploadResult = await uploadToBucket('seller-profiles', file, sellerId);
+      if (uploadResult.error) {
+        throw new Error(uploadResult.error);
       }
 
-      // Create unique filename with timestamp
-      const timestamp = Date.now();
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${sellerId}-${timestamp}.${fileExt}`;
-      const filePath = `profiles/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('seller-profiles')
-        .upload(filePath, file, { upsert: false });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('seller-profiles')
-        .getPublicUrl(filePath);
-
-      // Update seller with new image URL and timestamp for cache busting
-      const updateTime = new Date().toISOString();
-      const cacheBustedUrl = `${publicUrl}?v=${timestamp}`;
-
-      const { error: updateError } = await supabase.from('sellers')
-        .update({ 
-          profile_image_url: cacheBustedUrl,
-          updated_at: updateTime
-        })
-        .eq('id', sellerId);
-
-      if (updateError) throw updateError;
+      // Update database
+      const updateResult = await updateSellerMedia(sellerId, {
+        profile_image_url: uploadResult.publicUrl
+      });
+      if (updateResult.error) {
+        throw new Error(updateResult.error);
+      }
 
       toast({ title: "Framgång", description: "Profilbild uppladdad och sparad!" });
     } catch (error) {
@@ -143,70 +101,24 @@ const Admin = () => {
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
     try {
-      // Validate file type and size
-      const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
-      const audioFileName = file.name.toLowerCase();
-      const isValidType = validTypes.includes(file.type) || 
-                         audioFileName.endsWith('.mp3') || 
-                         audioFileName.endsWith('.wav') || 
-                         audioFileName.endsWith('.ogg');
-      
-      if (!isValidType) {
-        throw new Error('Ogiltigt filformat. Använd MP3, WAV eller OGG.');
-      }
-      
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        throw new Error('Ljudfilen är för stor. Max 10MB tillåtet.');
-      }
-      
-      // Remove existing sound files for this seller
-      const { data: existingFiles } = await supabase.storage
-        .from('seller-sounds')
-        .list('sounds');
-
-      if (existingFiles) {
-        const filesToRemove = existingFiles
-          .filter(f => f.name.startsWith(sellerId))
-          .map(f => `sounds/${f.name}`);
-        
-        if (filesToRemove.length > 0) {
-          await supabase.storage
-            .from('seller-sounds')
-            .remove(filesToRemove);
-        }
+      // Validate file
+      const validation = validateAudioFile(file);
+      if (!validation.valid) {
+        throw new Error(validation.error);
       }
 
-      // Create unique filename with timestamp  
-      const timestamp = Date.now();
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp3';
-      const uniqueFileName = `${sellerId}-${timestamp}.${fileExt}`;
-      const filePath = `sounds/${uniqueFileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('seller-sounds')
-        .upload(filePath, file, { upsert: false });
-
-      if (uploadError) {
-        throw uploadError;
+      // Upload to bucket
+      const uploadResult = await uploadToBucket('seller-sounds', file, sellerId);
+      if (uploadResult.error) {
+        throw new Error(uploadResult.error);
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('seller-sounds')
-        .getPublicUrl(filePath);
-
-      // Update seller with new sound URL and timestamp for cache busting
-      const updateTime = new Date().toISOString();
-      const cacheBustedUrl = `${publicUrl}?v=${timestamp}`;
-
-      const { error: updateError } = await supabase.from('sellers')
-        .update({ 
-          sound_file_url: cacheBustedUrl,
-          updated_at: updateTime
-        })
-        .eq('id', sellerId);
-
-      if (updateError) {
-        throw updateError;
+      // Update database
+      const updateResult = await updateSellerMedia(sellerId, {
+        sound_file_url: uploadResult.publicUrl
+      });
+      if (updateResult.error) {
+        throw new Error(updateResult.error);
       }
 
       toast({ 
@@ -296,7 +208,7 @@ const Admin = () => {
                       <div className="flex items-center gap-2">
                         {seller.profile_image_url ? (
                           <img
-                            src={seller.profile_image_url}
+                            src={getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url}
                             alt={seller.name}
                             className="w-8 h-8 rounded-full object-cover"
                           />
@@ -313,17 +225,20 @@ const Admin = () => {
                           <Volume2 className="w-4 h-4 text-green-600" />
                           <span className="text-sm text-green-600">Uppladdad</span>
                           <button
-                            onClick={() => {
-                              const audio = new Audio(seller.sound_file_url);
-                              audio.currentTime = 0;
-                              audio.volume = 0.8;
-                              audio.play().catch(e => {
+                            onClick={async () => {
+                              try {
+                                const versionedUrl = getVersionedUrl(seller.sound_file_url, seller.updated_at) || seller.sound_file_url;
+                                if (versionedUrl) {
+                                  const audio = await createAudio(versionedUrl);
+                                  await audio.play();
+                                }
+                              } catch (e) {
                                 toast({ 
                                   title: "Ljudfel", 
                                   description: "Kunde inte spela upp ljudfil", 
                                   variant: "destructive" 
                                 });
-                              });
+                              }
                             }}
                             className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
                           >

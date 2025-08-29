@@ -8,12 +8,14 @@ import { useToast } from '@/hooks/use-toast';
 import { User, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { SaleDeleteButton } from '@/components/SaleDeleteButton';
+import { getVersionedUrl } from '@/utils/media';
 
 interface Seller {
   id: string;
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
+  updated_at?: string;
 }
 
 const Sales = () => {
@@ -207,7 +209,7 @@ const Sales = () => {
                         <div className="flex items-center gap-2">
                           {seller.profile_image_url ? (
                             <img 
-                              src={seller.profile_image_url} 
+                              src={getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url} 
                               alt={seller.name}
                               className="w-6 h-6 rounded-full object-cover"
                             />

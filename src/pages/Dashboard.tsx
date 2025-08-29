@@ -4,6 +4,7 @@ import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { AudioManager } from '@/components/AudioManager';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import confetti from 'canvas-confetti';
+import { getVersionedUrl } from '@/utils/media';
 
 interface Sale {
   id: string;
@@ -18,13 +19,19 @@ interface Seller {
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
+  updated_at?: string;
 }
 
 const Dashboard = () => {
   const [celebrationQueue, setCelebrationQueue] = useState<{sale: Sale, seller?: Seller}[]>([]);
   const [currentCelebration, setCurrentCelebration] = useState<{sale: Sale, seller?: Seller} | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
-  const [currentAudio, setCurrentAudio] = useState<{ soundUrl: string; sellerName: string } | null>(null);
+  const [currentAudio, setCurrentAudio] = useState<{
+    soundUrl: string;
+    sellerName: string;
+    sale: Sale;
+    updatedAt?: string;
+  } | null>(null);
 
   // Process celebration queue
   const processNextCelebration = useCallback(() => {
@@ -45,7 +52,9 @@ const Dashboard = () => {
       if (next.seller?.sound_file_url) {
         setCurrentAudio({ 
           soundUrl: next.seller.sound_file_url, 
-          sellerName: next.seller.name 
+          sellerName: next.seller.name,
+          sale: next.sale,
+          updatedAt: next.seller.updated_at
         });
         setCelebrationAudioDuration(undefined);
       } else {
@@ -273,13 +282,13 @@ const Dashboard = () => {
 
       {/* Audio Manager */}
       {currentAudio && (
-        <AudioManager
-          soundUrl={currentAudio.soundUrl}
+        <AudioManager 
+          soundUrl={getVersionedUrl(currentAudio.soundUrl, currentAudio.updatedAt) || currentAudio.soundUrl}
           onEnded={handleAudioEnded}
           onDurationChange={handleAudioDurationChange}
           autoPlay={true}
           sellerName={currentAudio.sellerName}
-          key={`${currentAudio.soundUrl}-${Date.now()}`}
+          key={`${currentAudio.soundUrl}-${currentAudio.updatedAt || Date.now()}`}
         />
       )}
     </div>
