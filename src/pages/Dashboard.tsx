@@ -279,6 +279,7 @@ const Dashboard = () => {
           onDurationChange={handleAudioDurationChange}
           autoPlay={true}
           sellerName={currentAudio.sellerName}
+          key={`${currentAudio.soundUrl}-${Date.now()}`}
         />
       )}
     </div>

@@ -69,11 +69,16 @@ export const AudioManager = ({
         // Ensure we start from the beginning
         audio.currentTime = 0;
         
+        // Wait a bit to ensure audio is ready
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           await playPromise;
-          setShowActivationButton(false);
-          setAudioError(null);
+          if (isCurrentEffect) {
+            setShowActivationButton(false);
+            setAudioError(null);
+          }
         }
       } catch (error: any) {
         if (!isCurrentEffect) return;
@@ -92,7 +97,7 @@ export const AudioManager = ({
     audio.pause();
     audio.currentTime = 0;
     audio.volume = 0.8;
-    audio.preload = 'metadata';
+    audio.preload = 'auto';
     
     // Set up event listeners
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -100,8 +105,9 @@ export const AudioManager = ({
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
-    // Load audio - use original URL with existing cache busting
-    audio.src = soundUrl;
+    // Load audio with proper cache busting
+    const cacheBustUrl = soundUrl.includes('?') ? soundUrl : `${soundUrl}?cb=${Date.now()}`;
+    audio.src = cacheBustUrl;
     audio.load();
 
     return () => {

@@ -70,10 +70,18 @@ const Admin = () => {
 
   const handleProfileImageUpload = async (sellerId: string, file: File) => {
     try {
-      // Validate file type and size
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      if (!validTypes.includes(file.type)) {
-        throw new Error('Ogiltigt bildformat. Använd JPG, PNG eller WebP.');
+      // Validate file type and size - PNG is explicitly supported
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      const imageFileName = file.name.toLowerCase();
+      const isValidType = validTypes.includes(file.type) || 
+                         imageFileName.endsWith('.png') || 
+                         imageFileName.endsWith('.jpg') || 
+                         imageFileName.endsWith('.jpeg') || 
+                         imageFileName.endsWith('.webp') ||
+                         imageFileName.endsWith('.gif');
+      
+      if (!isValidType) {
+        throw new Error('Ogiltigt bildformat. Använd JPG, PNG, WebP eller GIF.');
       }
       
       if (file.size > 5 * 1024 * 1024) { // 5MB limit
@@ -137,11 +145,11 @@ const Admin = () => {
     try {
       // Validate file type and size
       const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
-      const fileName = file.name.toLowerCase();
+      const audioFileName = file.name.toLowerCase();
       const isValidType = validTypes.includes(file.type) || 
-                         fileName.endsWith('.mp3') || 
-                         fileName.endsWith('.wav') || 
-                         fileName.endsWith('.ogg');
+                         audioFileName.endsWith('.mp3') || 
+                         audioFileName.endsWith('.wav') || 
+                         audioFileName.endsWith('.ogg');
       
       if (!isValidType) {
         throw new Error('Ogiltigt filformat. Använd MP3, WAV eller OGG.');
@@ -307,11 +315,19 @@ const Admin = () => {
                           <button
                             onClick={() => {
                               const audio = new Audio(seller.sound_file_url);
-                              audio.play().catch(console.error);
+                              audio.currentTime = 0;
+                              audio.volume = 0.8;
+                              audio.play().catch(e => {
+                                toast({ 
+                                  title: "Ljudfel", 
+                                  description: "Kunde inte spela upp ljudfil", 
+                                  variant: "destructive" 
+                                });
+                              });
                             }}
                             className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
                           >
-                            Test
+                            Spela
                           </button>
                         </div>
                       ) : (
