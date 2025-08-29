@@ -266,66 +266,27 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Bottom row: Monthly top sellers & Last sale */}
-          <div className="flex gap-3 flex-1 min-h-0">
-            {/* Monthly top sellers */}
-            <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
-                  🥇 Månadens toppsäljare
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="overflow-y-auto">
-                <div className="space-y-2">
-                  {topSellers.slice(0, 5).map((seller, index) => (
-                    <div key={seller.name} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-600">{index + 1}.</span>
-                        <span className="font-semibold text-slate-800 text-sm">{seller.name}</span>
-                      </div>
-                      <span className="font-bold text-blue-700 text-sm">{formatCurrency(seller.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Last sale */}
-            <Card className="flex-1 shadow-md border-0 bg-white overflow-hidden">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
-                  🎯 Senaste försäljning
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {lastSale ? (
-                  <div className="space-y-2">
+          {/* Monthly top sellers - full width now */}
+          <Card className="shadow-md border-0 bg-white overflow-hidden flex-1 min-h-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
+                🥇 Månadens toppsäljare
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-y-auto">
+              <div className="space-y-2">
+                {topSellers.slice(0, 10).map((seller, index) => (
+                  <div key={seller.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                        <span className="text-sm font-bold text-green-700">
-                          {lastSale.seller_name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-800 text-sm">{lastSale.seller_name}</p>
-                        <p className="text-xs text-slate-600">
-                          {new Date(lastSale.timestamp).toLocaleTimeString('sv-SE', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </p>
-                      </div>
+                      <span className="text-sm font-bold text-slate-600">{index + 1}.</span>
+                      <span className="font-semibold text-slate-800 text-sm">{seller.name}</span>
                     </div>
-                    <div className="text-center py-2">
-                      <p className="text-2xl font-bold text-green-700">{formatCurrency(lastSale.amount_tb)}</p>
-                    </div>
+                    <span className="font-bold text-blue-700 text-sm">{formatCurrency(seller.amount)}</span>
                   </div>
-                ) : (
-                  <p className="text-center text-slate-500 py-8">Ingen försäljning idag</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

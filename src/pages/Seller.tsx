@@ -3,32 +3,61 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { User, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { SaleDeleteButton } from '@/components/SaleDeleteButton';
 
+interface Seller {
+  id: string;
+  name: string;
+  profile_image_url?: string;
+  sound_file_url?: string;
+}
+
 const Seller = () => {
-  const [sellerName, setSellerName] = useState('');
+  const [selectedSellerId, setSelectedSellerId] = useState('');
+  const [sellers, setSellers] = useState<Seller[]>([]);
   const [tb, setTb] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [todaysSales, setTodaysSales] = useState<any[]>([]);
   const { toast } = useToast();
 
-  // Load remembered seller name
+  // Load sellers from database
+  const loadSellers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sellers')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setSellers(data || []);
+    } catch (error) {
+      console.error('Error loading sellers:', error);
+      toast({
+        title: "Fel",
+        description: "Kunde inte ladda säljare",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Load remembered seller selection
   useEffect(() => {
-    const remembered = localStorage.getItem('seller-name');
+    const remembered = localStorage.getItem('selected-seller-id');
     if (remembered) {
-      setSellerName(remembered);
+      setSelectedSellerId(remembered);
     }
   }, []);
 
-  // Save seller name to localStorage
+  // Save seller selection to localStorage
   useEffect(() => {
-    if (sellerName.trim()) {
-      localStorage.setItem('seller-name', sellerName.trim());
+    if (selectedSellerId) {
+      localStorage.setItem('selected-seller-id', selectedSellerId);
     }
-  }, [sellerName]);
+  }, [selectedSellerId]);
 
   // Load today's sales
   const loadTodaysSales = async () => {
@@ -48,15 +77,21 @@ const Seller = () => {
   };
 
   useEffect(() => {
+    loadSellers();
     loadTodaysSales();
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes for both sellers and sales
     const channel = supabase
-      .channel('sales-realtime')
+      .channel('seller-sales-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         () => loadTodaysSales()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellers' },
+        () => loadSellers()
       )
       .subscribe();
 
@@ -68,10 +103,10 @@ const Seller = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!sellerName.trim()) {
+    if (!selectedSellerId) {
       toast({
-        title: "Fyll i ditt namn",
-        description: "Ditt namn måste anges.",
+        title: "Välj en säljare",
+        description: "Du måste välja en säljare från listan.",
         variant: "destructive"
       });
       return;
@@ -87,18 +122,29 @@ const Seller = () => {
       return;
     }
 
+    const selectedSeller = sellers.find(s => s.id === selectedSellerId);
+    if (!selectedSeller) {
+      toast({
+        title: "Fel",
+        description: "Vald säljare hittades inte.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setIsSubmitting(true);
 
     try {
       console.log('🚀 Submitting sale:', {
-        sellerName: sellerName.trim(),
+        sellerId: selectedSellerId,
+        sellerName: selectedSeller.name,
         tb: tbNumber
       });
 
       const { data, error } = await supabase.functions.invoke('report_sale', {
         body: {
-          sellerName: sellerName.trim(),
+          sellerId: selectedSellerId,
+          sellerName: selectedSeller.name,
           tb: tbNumber
         }
       });
@@ -110,14 +156,14 @@ const Seller = () => {
 
       console.log('✅ Sale reported successfully:', data);
 
-      const description = `${sellerName} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
+      const description = `${selectedSeller.name} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
 
       toast({
         title: "Försäljning rapporterad! 🎉",
         description,
       });
 
-      // Reset form (keep seller name)
+      // Reset form (keep seller selection)
       setTb('');
       
     } catch (error: any) {
@@ -151,23 +197,44 @@ const Seller = () => {
           </CardHeader>
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Seller Name */}
+              {/* Seller Selection */}
               <div className="space-y-2">
-                <Label htmlFor="seller-name" className="text-sm font-medium flex items-center gap-2">
+                <Label htmlFor="seller-select" className="text-sm font-medium flex items-center gap-2">
                   <User className="w-4 h-4 text-blue-600" />
-                  Ditt namn
+                  Välj säljare
                 </Label>
-                <Input
-                  id="seller-name"
-                  type="text"
-                  placeholder="Ange ditt namn"
-                  value={sellerName}
-                  onChange={(e) => setSellerName(e.target.value)}
-                  className="h-12"
+                <Select 
+                  value={selectedSellerId} 
+                  onValueChange={setSelectedSellerId}
                   disabled={isSubmitting}
-                  required
-                />
-                <p className="text-xs text-gray-500">Ditt namn sparas för framtida rapporter</p>
+                >
+                  <SelectTrigger className="h-12">
+                    <SelectValue placeholder="Välj en säljare från listan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sellers.map((seller) => (
+                      <SelectItem key={seller.id} value={seller.id}>
+                        <div className="flex items-center gap-2">
+                          {seller.profile_image_url ? (
+                            <img 
+                              src={seller.profile_image_url} 
+                              alt={seller.name}
+                              className="w-6 h-6 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
+                              <span className="text-xs font-bold text-blue-600">
+                                {seller.name.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                          )}
+                          {seller.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">Ditt val sparas för framtida rapporter</p>
               </div>
 
               {/* TB Amount */}
@@ -193,7 +260,7 @@ const Seller = () => {
               {/* Submit Button */}
               <Button
                 type="submit"
-                disabled={isSubmitting || !sellerName.trim() || !tb.trim()}
+                disabled={isSubmitting || !selectedSellerId || !tb.trim()}
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white font-semibold"
               >
                 {isSubmitting ? (

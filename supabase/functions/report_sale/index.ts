@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 interface ReportSaleRequest {
+  sellerId?: string;
   sellerName: string;
   tb: number;
 }
@@ -25,7 +26,7 @@ Deno.serve(async (req) => {
     const body: ReportSaleRequest = await req.json();
     console.log('📥 Request body:', body);
 
-    const { sellerName, tb } = body;
+    const { sellerId, sellerName, tb } = body;
 
     // Validation
     if (!sellerName || typeof sellerName !== 'string' || sellerName.trim() === '') {
@@ -66,45 +67,71 @@ Deno.serve(async (req) => {
     console.log('🔑 Creating Supabase client...');
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Find or create seller
-    console.log('👤 Looking for seller:', sellerName);
-    let { data: seller, error: sellerError } = await supabase
-      .from('sellers')
-      .select('id')
-      .eq('name', sellerName.trim())
-      .single();
-
-    let sellerId = null;
+    // Find or use provided seller
+    let sellerRecord;
     
-    if (sellerError || !seller) {
-      console.log('➕ Creating new seller:', sellerName);
-      const { data: newSeller, error: createError } = await supabase
+    if (sellerId) {
+      // Use provided seller ID
+      console.log('👤 Looking for seller by ID:', sellerId);
+      const { data: existingSeller, error: findError } = await supabase
         .from('sellers')
-        .insert([{ name: sellerName.trim() }])
-        .select('id')
+        .select('id, name')
+        .eq('id', sellerId)
         .single();
-      
-      if (createError) {
-        console.error('❌ Failed to create seller:', createError);
+
+      if (findError) {
+        console.error('❌ Error finding seller by ID:', findError);
         return new Response(JSON.stringify({ 
-          error: "Kunde inte skapa säljare" 
+          error: "Säljare hittades inte" 
         }), {
-          status: 500,
+          status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      
-      sellerId = newSeller.id;
+
+      sellerRecord = existingSeller;
+      console.log('✅ Using provided seller:', sellerRecord.id, sellerRecord.name);
     } else {
-      sellerId = seller.id;
+      // Fallback: Find or create seller by name (for backwards compatibility)
+      console.log('👤 Looking for seller by name:', sellerName);
+      let { data: seller, error: sellerError } = await supabase
+        .from('sellers')
+        .select('id')
+        .eq('name', sellerName.trim())
+        .single();
+
+      if (sellerError || !seller) {
+        console.log('➕ Creating new seller:', sellerName);
+        const { data: newSeller, error: createError } = await supabase
+          .from('sellers')
+          .insert([{ name: sellerName.trim() }])
+          .select('id')
+          .single();
+        
+        if (createError) {
+          console.error('❌ Failed to create seller:', createError);
+          return new Response(JSON.stringify({ 
+            error: "Kunde inte skapa säljare" 
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        sellerRecord = { id: newSeller.id, name: sellerName.trim() };
+        console.log('✅ Created new seller:', sellerRecord.id);
+      } else {
+        sellerRecord = { id: seller.id, name: sellerName.trim() };
+        console.log('✅ Found existing seller:', sellerRecord.id);
+      }
     }
 
     // Insert sale
     console.log('💾 Inserting sale...');
     const saleData = {
-      seller_name: sellerName.trim(),
+      seller_name: sellerRecord.name || sellerName.trim(),
       amount_tb: tb,
-      seller_id: sellerId,
+      seller_id: sellerRecord.id,
       timestamp: new Date().toISOString()
     };
     
