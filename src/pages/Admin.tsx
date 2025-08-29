@@ -176,15 +176,17 @@ const Admin = () => {
         .from('seller-sounds')
         .getPublicUrl(filePath);
 
-      // Add cache busting timestamp
-      const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`;
+      // Add cache busting timestamp with updated_at for proper cache control
+      const updateTime = new Date().toISOString();
+      const timestampForCache = new Date(updateTime).getTime();
+      const cacheBustedUrl = `${publicUrl}?v=${timestampForCache}`;
       
       console.log('🔗 Generated sound URL:', cacheBustedUrl);
 
       const { error: updateError, data: updateData } = await supabase.from('sellers')
         .update({ 
           sound_file_url: cacheBustedUrl,
-          updated_at: new Date().toISOString()
+          updated_at: updateTime
         })
         .eq('id', sellerId);
 
@@ -302,6 +304,15 @@ const Admin = () => {
                         <div className="flex items-center gap-2">
                           <Volume2 className="w-4 h-4 text-green-600" />
                           <span className="text-sm text-green-600">Uppladdad</span>
+                          <button
+                            onClick={() => {
+                              const audio = new Audio(seller.sound_file_url);
+                              audio.play().catch(console.error);
+                            }}
+                            className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                          >
+                            Test
+                          </button>
                         </div>
                       ) : (
                         <span className="text-sm text-gray-500">Ingen ljudfil</span>

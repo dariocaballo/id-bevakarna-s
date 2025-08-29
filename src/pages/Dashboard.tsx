@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { playApplauseSound } from '@/utils/sound';
 import { useImageCache } from '@/hooks/useImageCache';
-import { AudioPlayer } from '@/components/AudioPlayer';
+import { AudioManager } from '@/components/AudioManager';
 import confetti from 'canvas-confetti';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 
@@ -286,13 +286,14 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Audio Player for celebration sounds */}
+      {/* Audio Manager for celebration sounds with autoplay handling */}
       {currentAudio && (
-        <AudioPlayer
+        <AudioManager
           soundUrl={currentAudio.soundUrl}
           onEnded={handleAudioEnded}
           onDurationChange={handleAudioDurationChange}
           autoPlay={true}
+          sellerName={currentAudio.sellerName}
         />
       )}
     </div>
