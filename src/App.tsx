@@ -26,10 +26,6 @@ const Admin = lazy(() => import("./pages/Admin").catch(err => {
   return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda admin</p></div> };
 }));
 
-const Auth = lazy(() => import("./pages/Auth").catch(err => {
-  console.error('Failed to load Auth page:', err);
-  return { default: () => <div className="min-h-screen flex items-center justify-center"><p>Kunde inte ladda inloggning</p></div> };
-}));
 
 const NotFound = lazy(() => import("./pages/NotFound").catch(err => {
   console.error('Failed to load NotFound page:', err);
@@ -130,11 +126,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/seller" element={<Seller />} />
               <Route path="/sales" element={<Seller />} />
               <Route path="/admin" element={<Admin />} />
-              <Route path="/auth" element={<Auth />} />
-              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

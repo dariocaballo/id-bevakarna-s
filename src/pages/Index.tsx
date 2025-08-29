@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 const Index = () => {
   // Preload critical routes for better performance
   useEffect(() => {
-    // Preload dashboard and seller pages
+    // Preload dashboard and sales pages
     import('./Dashboard');
     import('./Seller');
   }, []);
@@ -33,24 +33,24 @@ const Index = () => {
       {/* Navigation Cards */}
       <div className="max-w-4xl mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-          {/* Säljprogram */}
+          {/* Säljrapportering */}
           <Card className="card-shadow border-0 smooth-transition hover:scale-105 cursor-pointer group">
             <CardHeader className="text-center pb-4">
               <div className="w-16 h-16 mx-auto mb-4 bg-primary/10 rounded-full flex items-center justify-center group-hover:hero-gradient smooth-transition">
                 <Users className="w-8 h-8 text-primary group-hover:text-white smooth-transition" />
               </div>
-              <CardTitle className="text-2xl text-primary">Säljprogram</CardTitle>
+              <CardTitle className="text-2xl text-primary">Säljrapportering</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
               <p className="text-muted-foreground mb-6">
-                Rapportera försäljning snabbt och enkelt. Perfekt för säljare som vill logga sina resultat direkt.
+                Rapportera försäljning snabbt och enkelt. Enkel sida för att registrera TB-försäljningar.
               </p>
               <Button 
                 asChild
                 className="w-full hero-gradient text-white primary-shadow smooth-transition hover:scale-105"
               >
-                <Link to="/seller" className="flex items-center justify-center gap-2">
-                  Starta säljprogram
+                <Link to="/sales" className="flex items-center justify-center gap-2">
+                  Rapportera försäljning
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </Button>
@@ -131,15 +131,7 @@ const Index = () => {
             size="sm"
             className="text-xs"
           >
-            <Link to="/auth">🔐 Logga in</Link>
-          </Button>
-          <Button 
-            asChild
-            variant="outline"
-            size="sm"
-            className="text-xs"
-          >
-            <Link to="/admin">🔐 Admin Panel</Link>
+            <Link to="/admin">🔧 Admin Panel</Link>
           </Button>
         </div>
       </div>

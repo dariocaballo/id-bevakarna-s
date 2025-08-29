@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
-import { useAudioManager } from '@/hooks/useAudioManager';
+import { playApplauseSound } from '@/utils/sound';
 import { useImageCache } from '@/hooks/useImageCache';
+import { AudioPlayer } from '@/components/AudioPlayer';
+import confetti from 'canvas-confetti';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 
 interface Sale {
@@ -21,46 +23,41 @@ interface Seller {
 }
 
 const Dashboard = () => {
-  const { initializeAudio, preloadSellerSounds, playSellerSound, ensureAudioContextReady } = useAudioManager();
   const { preloadImages, getCachedImage } = useImageCache();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
+  const [currentAudio, setCurrentAudio] = useState<{ soundUrl: string; sellerName: string } | null>(null);
 
   // Handle new sales with enhanced audio playback and celebration
   const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
     console.log('🎆 DASHBOARD CELEBRATION TRIGGERED!');
     console.log('🎯 Ny försäljning:', `seller=${sale.seller_name}, tb=${sale.amount_tb}`);
     
-    await ensureAudioContextReady();
-    
-    try {
-      console.log('🎵 Attempting to play seller sound for:', sale.seller_name);
-      console.log('🎵 Seller data:', { sellerId: sale.seller_id, soundUrl: seller?.sound_file_url });
-      
-      const audioResult = await playSellerSound(sale.seller_id, sale.seller_name);
-      
-      if (audioResult.played) {
-        const durationMs = audioResult.duration || 3000;
-        console.log('🎵 Audio played successfully, duration:', durationMs, 'ms');
-        setCelebrationAudioDuration(durationMs);
-      } else {
-        console.log('🎵 No custom audio played, using default duration');
-        setCelebrationAudioDuration(3000);
-      }
-    } catch (error) {
-      console.error('❌ Error playing sound:', error);
-      setCelebrationAudioDuration(3000);
+    // Play seller's audio if available
+    if (seller?.sound_file_url) {
+      console.log(`🎵 Playing sound for ${seller.name}`);
+      setCurrentAudio({ 
+        soundUrl: seller.sound_file_url, 
+        sellerName: seller.name 
+      });
+    } else {
+      console.log('🎵 No custom sound, using fallback');
+      // Fallback to default celebration without sound
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+      });
     }
     
     console.log('🎆 Setting celebration sale - overlay should appear now!');
     setCelebrationSale(sale);
-  }, [playSellerSound, ensureAudioContextReady]);
+  }, []);
 
   // Enhanced seller updates with live audio reloading
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
-    console.log('🔄 Enhanced seller update - reloading audio files...');
-    await ensureAudioContextReady();
-    await preloadSellerSounds(updatedSellers);
+    console.log('🔄 Enhanced seller update - reloading images...');
     
     const imageUrls = updatedSellers
       .map(seller => seller.profile_image_url)
@@ -70,8 +67,8 @@ const Dashboard = () => {
       preloadImages(imageUrls);
     }
     
-    console.log('✅ Enhanced seller audio update complete');
-  }, [preloadSellerSounds, ensureAudioContextReady, preloadImages]);
+    console.log('✅ Enhanced seller update complete');
+  }, [preloadImages]);
 
   // Use realtime data hook with TV-optimized settings
   const {
@@ -89,26 +86,9 @@ const Dashboard = () => {
     refreshInterval: 10000
   });
 
-  // Initialize audio and preload assets
+  // Initialize images
   useEffect(() => {
     if (sellers.length === 0) return;
-    
-    const handleUserInteraction = async () => {
-      await initializeAudio();
-      await ensureAudioContextReady();
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-      document.removeEventListener('focus', handleUserInteraction);
-    };
-    
-    document.addEventListener('click', handleUserInteraction);
-    document.addEventListener('keydown', handleUserInteraction);
-    document.addEventListener('touchstart', handleUserInteraction);
-    document.addEventListener('focus', handleUserInteraction);
-    
-    initializeAudio();
-    preloadSellerSounds(sellers);
     
     const imageUrls = sellers
       .map(seller => seller.profile_image_url)
@@ -117,14 +97,7 @@ const Dashboard = () => {
     if (imageUrls.length > 0) {
       preloadImages(imageUrls);
     }
-    
-    return () => {
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-      document.removeEventListener('focus', handleUserInteraction);
-    };
-  }, [sellers, initializeAudio, ensureAudioContextReady, preloadSellerSounds, preloadImages]);
+  }, [sellers, preloadImages]);
 
   // Optimized image rendering with cache and fallback
   const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-8 h-8") => {
@@ -170,6 +143,23 @@ const Dashboard = () => {
       case 4: return '🏅';
       default: return '';
     }
+  };
+
+  const handleAudioDurationChange = (duration: number) => {
+    console.log(`🎵 Audio duration detected: ${duration}ms`);
+    
+    // Start confetti with the detected duration
+    confetti({
+      particleCount: 120,
+      spread: 80,
+      origin: { y: 0.6 },
+      colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+    });
+  };
+
+  const handleAudioEnded = () => {
+    console.log('🎵 Audio playback completed');
+    setCurrentAudio(null);
   };
 
   // Get seller info for celebration
@@ -289,6 +279,16 @@ const Dashboard = () => {
           </Card>
         </div>
       </div>
+
+      {/* Audio Player for celebration sounds */}
+      {currentAudio && (
+        <AudioPlayer
+          soundUrl={currentAudio.soundUrl}
+          onEnded={handleAudioEnded}
+          onDurationChange={handleAudioDurationChange}
+          autoPlay={true}
+        />
+      )}
     </div>
   );
 };
