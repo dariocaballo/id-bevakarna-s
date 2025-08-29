@@ -33,7 +33,6 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    console.log('🗑️ Attempting to delete sale:', { saleId, sellerName, amount });
     
     try {
       const { error } = await supabase
@@ -42,7 +41,6 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
         .eq('id', saleId);
 
       if (error) {
-        console.error('❌ Error deleting sale:', error);
         toast({
           title: "Fel",
           description: `Kunde inte ta bort försäljningen: ${error.message}`,
@@ -50,8 +48,6 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
         });
         return;
       }
-
-      console.log('✅ Sale deleted successfully:', saleId);
       
       toast({
         title: "Försäljning borttagen",
@@ -62,7 +58,6 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
         onDeleted();
       }
     } catch (error) {
-      console.error('❌ Unexpected error deleting sale:', error);
       toast({
         title: "Fel",
         description: "Ett oväntat fel inträffade vid radering",

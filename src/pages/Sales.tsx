@@ -86,18 +86,12 @@ const Sales = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
-        () => {
-          console.log('Sales updated in seller page, reloading...');
-          loadTodaysSales();
-        }
+        () => loadTodaysSales()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
-        () => {
-          console.log('Sellers updated in seller page, reloading...');
-          loadSellers();
-        }
+        () => loadSellers()
       )
       .subscribe();
 
@@ -141,12 +135,6 @@ const Sales = () => {
     setIsSubmitting(true);
 
     try {
-      console.log('🚀 Submitting sale:', {
-        sellerId: selectedSellerId,
-        sellerName: selectedSeller.name,
-        tb: tbNumber
-      });
-
       const { data, error } = await supabase.functions.invoke('report_sale', {
         body: {
           sellerId: selectedSellerId,
@@ -156,11 +144,8 @@ const Sales = () => {
       });
 
       if (error) {
-        console.error('Function error:', error);
         throw new Error(error.message || 'Kunde inte ansluta till servern');
       }
-
-      console.log('✅ Sale reported successfully:', data);
 
       const description = `${selectedSeller.name} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
 
@@ -173,7 +158,6 @@ const Sales = () => {
       setTb('');
       
     } catch (error: any) {
-      console.error('❌ Sale reporting failed:', error);
       toast({
         title: "Fel",
         description: error.message || "Kunde inte registrera försäljning",

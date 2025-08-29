@@ -63,7 +63,6 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       
       if (isMountedRef.current) {
         setSellers(sellersData);
-        console.log('📋 Loaded sellers:', sellersData.length, 'sellers');
       }
       
       return sellersData;
@@ -155,31 +154,20 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         setTodaysSellers(todaysSellersArray);
       }
       
-      console.log('📊 Sales data loaded:', {
-        todaysTotal,
-        monthsTotal,
-        topSellersCount: topSellersArray.length,
-        todaysSellersCount: todaysSellersArray.length
-      });
     } catch (error) {
       console.error('❌ Error loading sales data:', error);
     }
   }, []);
 
   const setupRealtimeSubscription = useCallback(() => {
-    console.log('🔄 Setting up real-time subscription...');
-    
     channelRef.current = supabase
       .channel('dashboard-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         async (payload) => {
-          console.log('🔊 Sales update received:', payload.eventType);
-          
           if (payload.eventType === 'INSERT' && isMountedRef.current) {
             const newSale = payload.new as Sale;
-            console.log('🎆 NEW SALE:', newSale.seller_name, newSale.amount_tb, 'tb');
             
             // Find seller and trigger callback
             const seller = sellersCache.current.find(s => 
@@ -188,7 +176,6 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
             );
             
             if (onNewSale) {
-              console.log('🎆 Triggering celebration!');
               onNewSale(newSale, seller);
             }
           }
@@ -201,19 +188,15 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sellers' },
         async (payload) => {
-          console.log('👥 Sellers update received:', payload.eventType);
           const sellersData = await loadSellers();
           await loadSalesData(sellersData);
           
-          // Notify parent component about seller changes
           if (onSellerUpdate) {
             onSellerUpdate(sellersData);
           }
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Realtime subscription status:', status);
-      });
+      .subscribe();
   }, [loadSalesData, loadSellers, onNewSale, onSellerUpdate]);
 
   const refreshData = useCallback(async () => {
@@ -238,14 +221,12 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
     // Setup auto-refresh interval if enabled
     if (enableAutoRefresh) {
       refreshIntervalRef.current = setInterval(() => {
-        console.log('⏰ Auto-refreshing data...');
         loadSalesData();
       }, refreshInterval);
     }
 
     // Cleanup function
     return () => {
-      console.log('🧹 Cleaning up realtime subscriptions...');
       isMountedRef.current = false;
       
       if (channelRef.current) {

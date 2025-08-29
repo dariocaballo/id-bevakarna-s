@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
-import { playApplauseSound } from '@/utils/sound';
-import { useImageCache } from '@/hooks/useImageCache';
 import { AudioManager } from '@/components/AudioManager';
 import confetti from 'canvas-confetti';
-import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 
 interface Sale {
   id: string;
@@ -23,16 +20,12 @@ interface Seller {
 }
 
 const Dashboard = () => {
-  const { preloadImages, getCachedImage } = useImageCache();
   const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   const [currentAudio, setCurrentAudio] = useState<{ soundUrl: string; sellerName: string } | null>(null);
 
   // Handle new sales with immediate celebration
-  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
-    console.log('🎆 DASHBOARD CELEBRATION TRIGGERED!');
-    console.log('🎯 Ny försäljning:', `seller=${sale.seller_name}, tb=${sale.amount_tb}`);
-    
+  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {    
     // Always trigger immediate confetti
     const triggerConfetti = () => {
       confetti({
@@ -48,37 +41,22 @@ const Dashboard = () => {
     
     // Play seller's audio if available
     if (seller?.sound_file_url) {
-      console.log(`🎵 Playing sound for ${seller.name}: ${seller.sound_file_url}`);
       setCurrentAudio({ 
         soundUrl: seller.sound_file_url, 
         sellerName: seller.name 
       });
-      // Reset duration for new audio
       setCelebrationAudioDuration(undefined);
     } else {
-      console.log('🎵 No custom sound for seller');
-      // No audio, use default 3 second duration
       setCelebrationAudioDuration(3000);
     }
     
-    console.log('🎆 Setting celebration sale - overlay should appear now!');
     setCelebrationSale(sale);
   }, []);
 
-  // Enhanced seller updates with live audio reloading
+  // Handle seller updates
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
-    console.log('🔄 Enhanced seller update - reloading images...');
-    
-    const imageUrls = updatedSellers
-      .map(seller => seller.profile_image_url)
-      .filter(url => url) as string[];
-    
-    if (imageUrls.length > 0) {
-      preloadImages(imageUrls);
-    }
-    
-    console.log('✅ Enhanced seller update complete');
-  }, [preloadImages]);
+    // Seller data updated - no specific action needed
+  }, []);
 
   // Use realtime data hook with TV-optimized settings
   const {
@@ -96,46 +74,33 @@ const Dashboard = () => {
     refreshInterval: 10000
   });
 
-  // Initialize images
-  useEffect(() => {
-    if (sellers.length === 0) return;
-    
-    const imageUrls = sellers
-      .map(seller => seller.profile_image_url)
-      .filter(url => url) as string[];
-    
-    if (imageUrls.length > 0) {
-      preloadImages(imageUrls);
-    }
-  }, [sellers, preloadImages]);
 
-  // Optimized image rendering with cache and fallback
-  const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }, size: string = "w-8 h-8") => {
+  // Optimized image rendering
+  const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }) => {
     if (!seller.imageUrl) {
       return (
-        <span className="text-sm font-bold text-slate-800">
+        <span className="text-lg font-bold text-slate-800">
           {seller.name.charAt(0).toUpperCase()}
         </span>
       );
     }
-
-    const cachedImageUrl = getCachedImage(seller.imageUrl);
     
     return (
       <img 
-        src={cachedImageUrl || seller.imageUrl}
+        src={seller.imageUrl}
         alt={seller.name}
-        className={`${size} object-cover rounded-full`}
+        className="w-full h-full object-cover"
         onError={(e) => {
-          e.currentTarget.style.display = 'none';
-          const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+          const target = e.currentTarget;
+          target.style.display = 'none';
+          const fallback = target.parentElement?.querySelector('.fallback-initial');
           if (fallback) {
-            fallback.style.display = 'flex';
+            (fallback as HTMLElement).style.display = 'flex';
           }
         }}
       />
     );
-  }, [getCachedImage]);
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
@@ -156,16 +121,27 @@ const Dashboard = () => {
   };
 
   const handleAudioDurationChange = (duration: number) => {
-    console.log(`🎵 Audio duration detected: ${duration}s`);
-    // Convert duration from seconds to milliseconds for celebration overlay
     setCelebrationAudioDuration(duration * 1000);
   };
 
   const handleAudioEnded = () => {
-    console.log('🎵 Audio playback completed');
     setCurrentAudio(null);
     setCelebrationAudioDuration(undefined);
+    setCelebrationSale(null);
   };
+
+  // Auto-clear celebration after timeout
+  useEffect(() => {
+    if (celebrationSale && celebrationAudioDuration) {
+      const timer = setTimeout(() => {
+        setCelebrationSale(null);
+        setCelebrationAudioDuration(undefined);
+        setCurrentAudio(null);
+      }, celebrationAudioDuration);
+
+      return () => clearTimeout(timer);
+    }
+  }, [celebrationSale, celebrationAudioDuration]);
 
   // Get seller info for celebration
   const getSeller = (sale: Sale) => {
@@ -192,20 +168,22 @@ const Dashboard = () => {
           <h2 className="text-lg font-semibold text-blue-600">Sales Dashboard</h2>
         </div>
 
-        {/* Celebration Overlay */}
-        <CelebrationOverlay
-          sale={celebrationSale}
-          sellerImage={celebrationSale ? getSeller(celebrationSale)?.profile_image_url : undefined}
-          onComplete={() => {
-            console.log('✅ Celebration end');
-            setCelebrationSale(null);
-            setCelebrationAudioDuration(undefined);
-            setCurrentAudio(null);
-          }}
-          showBubble={settings.show_bubble !== false}
-          showConfetti={settings.show_confetti !== false}
-          audioDuration={celebrationAudioDuration}
-        />
+        {/* Celebration Display */}
+        {celebrationSale && (
+          <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl border-4 border-green-500 animate-pulse">
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎉</div>
+                <h3 className="text-3xl font-bold text-green-700 mb-2">
+                  {celebrationSale.seller_name}
+                </h3>
+                <p className="text-xl text-gray-600">
+                  {celebrationSale.amount_tb.toLocaleString('sv-SE')} tb
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Layout */}
         <div className="flex-1 flex flex-col gap-3 overflow-hidden">
@@ -240,11 +218,10 @@ const Dashboard = () => {
                     {/* Large circle with profile image */}
                     <div className="relative">
                       <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-blue-300 shadow-lg">
-                        {seller.imageUrl ? (
-                          <img src={seller.imageUrl} alt={seller.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-lg font-bold text-slate-800">{seller.name.charAt(0).toUpperCase()}</span>
-                        )}
+                        {renderSellerImage(seller)}
+                        <span className="fallback-initial text-lg font-bold text-slate-800" style={{display: 'none'}}>
+                          {seller.name.charAt(0).toUpperCase()}
+                        </span>
                       </div>
                       {/* Medal */}
                       <div className="absolute -top-1 -right-1 text-lg">
@@ -286,7 +263,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Audio Manager for celebration sounds with autoplay handling */}
+      {/* Audio Manager */}
       {currentAudio && (
         <AudioManager
           soundUrl={currentAudio.soundUrl}

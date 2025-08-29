@@ -58,10 +58,7 @@ const Admin = () => {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'sellers' },
-          () => {
-            console.log('Sellers updated, reloading...');
-            loadSellers();
-          }
+          () => loadSellers()
         )
         .subscribe();
 
@@ -84,7 +81,6 @@ const Admin = () => {
           .map(f => `profiles/${f.name}`);
         
         if (filesToRemove.length > 0) {
-          console.log('🗑️ Removing old profile images:', filesToRemove);
           await supabase.storage
             .from('seller-profiles')
             .remove(filesToRemove);
@@ -95,7 +91,6 @@ const Admin = () => {
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `profiles/${fileName}`;
 
-      console.log('📤 Uploading profile image:', filePath);
       const { error: uploadError } = await supabase.storage
         .from('seller-profiles')
         .upload(filePath, file, { upsert: true });
@@ -108,8 +103,6 @@ const Admin = () => {
 
       // Add cache busting timestamp
       const cacheBustedUrl = `${publicUrl}?v=${Date.now()}`;
-      
-      console.log('🔗 Generated image URL:', cacheBustedUrl);
 
       const { error: updateError } = await supabase.from('sellers')
         .update({ 
@@ -123,15 +116,12 @@ const Admin = () => {
       toast({ title: "Framgång", description: "Profilbild uppladdad!" });
       loadSellers();
     } catch (error) {
-      console.error('❌ Error uploading profile image:', error);
       toast({ title: "Fel", description: "Kunde inte ladda upp profilbild", variant: "destructive" });
     }
   };
 
   const handleSoundFileUpload = async (sellerId: string, file: File) => {
     try {
-      console.log('🎵 Starting sound file upload for seller:', sellerId, 'File:', file.name, 'Size:', file.size);
-      
       // Validate file type
       const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
       if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.mp3')) {
@@ -149,7 +139,6 @@ const Admin = () => {
           .map(f => `sounds/${f.name}`);
         
         if (filesToRemove.length > 0) {
-          console.log('🗑️ Removing old sound files:', filesToRemove);
           await supabase.storage
             .from('seller-sounds')
             .remove(filesToRemove);
@@ -160,28 +149,22 @@ const Admin = () => {
       const fileName = `${sellerId}.${fileExt}`;
       const filePath = `sounds/${fileName}`;
 
-      console.log('📤 Uploading sound file:', filePath);
       const { error: uploadError, data: uploadData } = await supabase.storage
         .from('seller-sounds')
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) {
-        console.error('❌ Upload error:', uploadError);
         throw uploadError;
       }
-      
-      console.log('✅ File uploaded successfully:', uploadData);
 
       const { data: { publicUrl } } = supabase.storage
         .from('seller-sounds')
         .getPublicUrl(filePath);
 
-      // Add cache busting timestamp with updated_at for proper cache control
+      // Add cache busting timestamp
       const updateTime = new Date().toISOString();
       const timestampForCache = new Date(updateTime).getTime();
       const cacheBustedUrl = `${publicUrl}?v=${timestampForCache}`;
-      
-      console.log('🔗 Generated sound URL:', cacheBustedUrl);
 
       const { error: updateError, data: updateData } = await supabase.from('sellers')
         .update({ 
@@ -191,11 +174,8 @@ const Admin = () => {
         .eq('id', sellerId);
 
       if (updateError) {
-        console.error('❌ Database update error:', updateError);
         throw updateError;
       }
-      
-      console.log('✅ Database updated successfully:', updateData);
 
       toast({ 
         title: "Framgång", 
@@ -203,11 +183,9 @@ const Admin = () => {
         duration: 5000
       });
       
-      // Force reload to see changes immediately
       await loadSellers();
     } catch (error) {
-      console.error('❌ Error uploading sound file:', error);
-      toast({ 
+      toast({
         title: "Fel", 
         description: `Kunde inte ladda upp ljudfil: ${error instanceof Error ? error.message : 'Okänt fel'}`, 
         variant: "destructive",
@@ -345,7 +323,6 @@ const Admin = () => {
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              console.log('🎵 File selected:', file.name, file.type, file.size);
                               handleSoundFileUpload(seller.id, file);
                             }
                           }}
