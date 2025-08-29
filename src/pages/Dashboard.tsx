@@ -33,51 +33,6 @@ const Dashboard = () => {
     updatedAt?: string;
   } | null>(null);
 
-  // Process celebration queue
-  const processNextCelebration = useCallback(() => {
-    if (celebrationQueue.length > 0 && !currentCelebration) {
-      const next = celebrationQueue[0];
-      setCelebrationQueue(prev => prev.slice(1));
-      setCurrentCelebration(next);
-      
-      // Start confetti immediately
-      confetti({
-        particleCount: 120,
-        spread: 80,
-        origin: { y: 0.6 },
-        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
-      });
-      
-      // Setup audio if available
-      if (next.seller?.sound_file_url) {
-        setCurrentAudio({ 
-          soundUrl: next.seller.sound_file_url, 
-          sellerName: next.seller.name,
-          sale: next.sale,
-          updatedAt: next.seller.updated_at
-        });
-        setCelebrationAudioDuration(undefined);
-      } else {
-        setCelebrationAudioDuration(3000);
-      }
-    }
-  }, [celebrationQueue, currentCelebration]);
-
-  // Handle new sales - add to queue
-  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
-    setCelebrationQueue(prev => [...prev, { sale, seller }]);
-  }, []);
-
-  // Process queue when it changes
-  useEffect(() => {
-    processNextCelebration();
-  }, [processNextCelebration]);
-
-  // Handle seller updates
-  const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
-    // Seller data updated - no specific action needed
-  }, []);
-
   // Use realtime data hook with TV-optimized settings
   const {
     totalToday,
@@ -88,11 +43,74 @@ const Dashboard = () => {
     settings,
     isLoading
   } = useRealtimeData({
-    onNewSale: handleNewSale,
-    onSellerUpdate: handleSellerUpdate,
+    onNewSale: useCallback(async (sale: Sale, seller?: Seller) => {
+      console.log('🎉 New sale received:', sale);
+      setCelebrationQueue(prev => [...prev, { sale, seller }]);
+    }, []),
+    onSellerUpdate: useCallback(async (updatedSellers: Seller[]) => {
+      // Seller data updated - no specific action needed
+    }, []),
     enableAutoRefresh: true,
     refreshInterval: 10000
   });
+
+  // Enhanced seller matching when processing celebrations
+  const processNextCelebration = useCallback(() => {
+    if (celebrationQueue.length > 0 && !currentCelebration) {
+      const next = celebrationQueue[0];
+      setCelebrationQueue(prev => prev.slice(1));
+      
+      // Stop any current audio immediately
+      if (currentAudio) {
+        setCurrentAudio(null);
+        setCelebrationAudioDuration(undefined);
+      }
+      
+      // Enhanced seller matching using latest sellers data
+      let matchedSeller = next.seller;
+      if (!matchedSeller && next.sale.seller_id && sellers.length > 0) {
+        matchedSeller = sellers.find(s => s.id === next.sale.seller_id);
+      }
+      if (!matchedSeller && next.sale.seller_name && sellers.length > 0) {
+        matchedSeller = sellers.find(s => s.name.toLowerCase() === next.sale.seller_name.toLowerCase());
+      }
+      
+      const enhancedNext = { ...next, seller: matchedSeller };
+      setCurrentCelebration(enhancedNext);
+      console.log('🎊 Starting celebration for:', enhancedNext.sale.seller_name);
+      console.log('🎯 Final matched seller:', matchedSeller);
+      
+      // Start confetti immediately when celebration begins
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+      });
+      
+      // Setup audio if available with proper cache busting
+      if (matchedSeller?.sound_file_url) {
+        const audioUrl = matchedSeller.sound_file_url;
+        console.log('🔊 Setting up audio:', audioUrl);
+        
+        setCurrentAudio({ 
+          soundUrl: audioUrl, 
+          sellerName: matchedSeller.name,
+          sale: enhancedNext.sale,
+          updatedAt: matchedSeller.updated_at
+        });
+        setCelebrationAudioDuration(undefined); // Will be set by AudioManager
+      } else {
+        console.log('⚠️ No sound file for seller:', enhancedNext.sale.seller_name);
+        setCelebrationAudioDuration(3000); // Default duration
+      }
+    }
+  }, [celebrationQueue, currentCelebration, currentAudio, sellers]);
+
+  // Process queue when it changes
+  useEffect(() => {
+    processNextCelebration();
+  }, [processNextCelebration]);
 
 
   // Optimized image rendering
@@ -145,15 +163,17 @@ const Dashboard = () => {
   };
 
   const handleAudioEnded = () => {
-    // Clear current celebration
+    console.log('🎵 Audio ended, clearing celebration');
+    
+    // Clear current celebration immediately
     setCurrentAudio(null);
     setCelebrationAudioDuration(undefined);
     setCurrentCelebration(null);
     
-    // Process next in queue after a short delay
+    // Process next in queue after a short delay to allow UI cleanup
     setTimeout(() => {
       processNextCelebration();
-    }, 500);
+    }, 300);
   };
 
   // Auto-clear celebration after timeout (for cases without audio)
