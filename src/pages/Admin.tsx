@@ -67,6 +67,13 @@ const Admin = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
+      // Clear any localStorage drafts to ensure DB is source of truth
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('admin-draft-') || key.includes('pending-changes')) {
+          localStorage.removeItem(key);
+        }
+      });
+
       loadSellers();
       
       // Set up real-time subscription for sellers
