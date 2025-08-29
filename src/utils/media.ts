@@ -104,7 +104,7 @@ export async function uploadToBucket(
 }
 
 /**
- * Update seller media URLs in database with atomic update
+ * Update seller media URLs in database with proper conflict resolution
  */
 export async function updateSellerMedia(
   sellerId: string, 
@@ -115,19 +115,40 @@ export async function updateSellerMedia(
   try {
     const updateTime = new Date().toISOString();
     
-    // Use atomic update with updated_at timestamp
+    // First verify seller exists
+    const { data: existingSeller, error: checkError } = await supabase
+      .from('sellers')
+      .select('id, name')
+      .eq('id', sellerId)
+      .maybeSingle();
+    
+    if (checkError) {
+      console.error('❌ Error checking seller existence:', checkError);
+      throw new Error(`Kunde inte kontrollera säljare: ${checkError.message}`);
+    }
+    
+    if (!existingSeller) {
+      console.error('❌ Seller not found:', sellerId);
+      throw new Error(`Säljare med ID ${sellerId} hittades inte`);
+    }
+    
+    // Use UPSERT with proper conflict resolution to ensure atomicity
     const { data, error } = await supabase
       .from('sellers')
-      .update({ 
+      .upsert({ 
+        id: sellerId,
+        name: existingSeller.name, // Preserve existing name
         ...updates,
         updated_at: updateTime
+      }, {
+        onConflict: 'id',
+        ignoreDuplicates: false
       })
-      .eq('id', sellerId)
       .select()
       .single();
 
     if (error) {
-      console.error('❌ Database update error:', error);
+      console.error('❌ Database upsert error:', error);
       throw new Error(`Databasfel: ${error.message}`);
     }
     

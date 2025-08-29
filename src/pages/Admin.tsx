@@ -289,7 +289,7 @@ const Admin = () => {
       await removeOldFiles(sellerId, seller.profile_image_url, undefined);
       
       const updateResult = await updateSellerMedia(sellerId, {
-        profile_image_url: null as any
+        profile_image_url: null
       });
       if (updateResult.error) {
         throw new Error(updateResult.error);
@@ -324,7 +324,7 @@ const Admin = () => {
       await removeOldFiles(sellerId, undefined, seller.sound_file_url);
       
       const updateResult = await updateSellerMedia(sellerId, {
-        sound_file_url: null as any
+        sound_file_url: null
       });
       if (updateResult.error) {
         throw new Error(updateResult.error);
