@@ -1,233 +1,162 @@
-import React, { useEffect, useState } from 'react';
-import confetti from 'canvas-confetti';
+import React, { useState, useEffect, useRef } from 'react';
+
+interface Sale {
+  id: string;
+  seller_name: string;
+  amount_tb: number;
+  timestamp: string;
+  seller_id?: string;
+}
 
 interface CelebrationOverlayProps {
-  sale: {
-    seller_name: string;
-    amount_tb: number;
-    seller_id?: string;
-  } | null;
+  sale: Sale | null;
   sellerImage?: string;
   onComplete: () => void;
-  showBubble: boolean;
-  showConfetti: boolean;
-  audioDuration?: number; // Duration from audio playback in milliseconds
+  audioDuration?: number;
+  showBubble?: boolean;
+  showConfetti?: boolean;
 }
 
 export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
   sale,
   sellerImage,
   onComplete,
-  showBubble,
-  showConfetti,
   audioDuration,
+  showBubble = true,
+  showConfetti = true
 }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!sale) return;
-
-    // Enhanced celebration duration sync with precise audio timing
-    const celebrationDuration = audioDuration || 3000;
-    const startTime = Date.now();
-    console.log(`🎉 Starting ENHANCED celebration for ${sale.seller_name} - Duration: ${celebrationDuration}ms at ${new Date().toISOString()}`);
-
-    // Enhanced confetti pre-initialization for 24/7 TV operation
-    if (showConfetti) {
-      try {
-        // Multiple initialization strategies for maximum reliability
-        confetti({ particleCount: 1, startVelocity: 0, spread: 0, origin: { x: -1, y: -1 } });
-        
-        // Force canvas creation and GPU acceleration
-        const canvas = document.querySelector('canvas[data-confetti-id]') as HTMLCanvasElement;
-        if (canvas) {
-          const context = canvas.getContext('2d');
-          if (context) {
-            context.save();
-            context.restore();
-          }
-        }
-        
-        console.log('✅ Enhanced confetti pre-initialized successfully');
-      } catch (error) {
-        console.warn('⚠️ Enhanced confetti pre-initialization failed:', error);
-      }
-    }
-
-    // Enhanced animation start with triple redundancy
-    const startAnimation = () => {
+    if (sale) {
       setIsVisible(true);
-      console.log(`✅ Enhanced celebration visibility set to true (${Date.now() - startTime}ms after start)`);
-    };
-    
-    // Triple redundancy for animation start
-    requestAnimationFrame(startAnimation);
-    setTimeout(startAnimation, 16); // Fallback after 1 frame
-    setTimeout(startAnimation, 50); // Second fallback
+      setIsAnimating(true);
 
-    let confettiInterval: NodeJS.Timeout | null = null;
-    let confettiTimeouts: NodeJS.Timeout[] = [];
-
-    // Enhanced confetti system with precise timing and error recovery
-    if (showConfetti) {
-      const animationEnd = startTime + celebrationDuration;
-      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
-
-      const randomInRange = (min: number, max: number) => {
-        return Math.random() * (max - min) + min;
-      };
-
-      // Enhanced initial confetti burst with retry mechanism
-      const triggerInitialBurst = () => {
-        try {
-          confetti({
-            ...defaults,
-            particleCount: 150, // More particles for better TV visibility
-            origin: { x: 0.5, y: 0.5 }
-          });
-          console.log('✅ Enhanced initial confetti burst triggered');
-        } catch (error) {
-          console.warn('⚠️ Enhanced initial confetti burst failed:', error);
-          // Retry once after short delay
-          const retryTimeout = setTimeout(() => {
-            try {
-              confetti({
-                ...defaults,
-                particleCount: 100,
-                origin: { x: 0.5, y: 0.5 }
-              });
-              console.log('✅ Retry confetti burst successful');
-            } catch (retryError) {
-              console.warn('⚠️ Retry confetti burst also failed:', retryError);
-            }
-          }, 100);
-          confettiTimeouts.push(retryTimeout);
-        }
-      };
-
-      triggerInitialBurst();
-
-      // Enhanced continuous confetti with precise timing
-      confettiInterval = setInterval(() => {
-        const now = Date.now();
-        const timeLeft = animationEnd - now;
-        const progress = 1 - (timeLeft / celebrationDuration);
-
-        if (timeLeft <= 0) {
-          if (confettiInterval) clearInterval(confettiInterval);
-          return;
-        }
-
-        // Dynamic particle count based on time remaining and TV visibility
-        const baseParticleCount = Math.max(30, 60 * (timeLeft / celebrationDuration));
-        const particleCount = Math.floor(baseParticleCount);
-
-        try {
-          // Dual confetti bursts for better TV coverage
-          confetti({
-            ...defaults,
-            particleCount,
-            origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
-          });
-          confetti({
-            ...defaults,
-            particleCount,
-            origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
-          });
-          
-          // Extra center burst at 50% completion for emphasis
-          if (progress >= 0.45 && progress <= 0.55) {
-            confetti({
-              ...defaults,
-              particleCount: Math.floor(particleCount * 0.5),
-              origin: { x: 0.5, y: 0.3 }
-            });
-          }
-          
-        } catch (error) {
-          console.warn('⚠️ Enhanced confetti rendering failed:', error);
-          if (confettiInterval) clearInterval(confettiInterval);
-        }
-      }, 200); // Slightly faster for better TV effect
-    }
-
-    // Enhanced celebration end with precise timing
-    const celebrationEndTime = startTime + celebrationDuration;
-    const timeToEnd = celebrationEndTime - Date.now();
-    
-    const timer = setTimeout(() => {
-      const actualDuration = Date.now() - startTime;
-      console.log(`🎉 Enhanced celebration ending for ${sale.seller_name} (actual duration: ${actualDuration}ms, target: ${celebrationDuration}ms)`);
-      
-      // Clean up confetti immediately
-      if (confettiInterval) {
-        clearInterval(confettiInterval);
-        confettiInterval = null;
+      // Clear any existing timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
-      
-      // Clear any pending timeouts
-      confettiTimeouts.forEach(timeout => clearTimeout(timeout));
-      confettiTimeouts = [];
-      
-      setIsVisible(false);
-      
-      // Enhanced completion with precise timing
-      const fadeOutTimer = setTimeout(() => {
-        const totalDuration = Date.now() - startTime;
-        console.log(`🎉 Enhanced celebration complete for ${sale.seller_name} (total: ${totalDuration}ms)`);
-        onComplete();
-      }, 300);
-      
-      confettiTimeouts.push(fadeOutTimer);
-    }, Math.max(0, timeToEnd));
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+
+      // Set completion timeout based on audio duration or default
+      const duration = audioDuration || 3000;
+      timeoutRef.current = setTimeout(() => {
+        handleComplete();
+      }, duration);
+    }
 
     return () => {
-      if (timer) clearTimeout(timer);
-      if (confettiInterval) clearInterval(confettiInterval);
-      confettiTimeouts.forEach(timeout => clearTimeout(timeout));
-      
-      console.log(`🧹 Enhanced celebration cleanup for ${sale.seller_name}`);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
     };
-  }, [sale, showConfetti, onComplete, audioDuration]);
+  }, [sale, audioDuration]);
 
-  if (!sale || !showBubble) return null;
+  const handleComplete = () => {
+    setIsAnimating(false);
+    animationTimeoutRef.current = setTimeout(() => {
+      setIsVisible(false);
+      onComplete();
+    }, 300); // Allow fade out animation
+  };
+
+  if (!isVisible || !sale) return null;
 
   return (
-    <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 transition-opacity duration-300 ${
-        isVisible ? 'opacity-100' : 'opacity-0'
+    <div 
+      className={`fixed inset-0 pointer-events-none z-50 flex items-center justify-center transition-all duration-300 ${
+        isAnimating ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
       }`}
+      style={{
+        background: 'radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, rgba(0, 0, 0, 0.1) 100%)'
+      }}
     >
-      <div
-        className={`bg-white rounded-2xl p-8 shadow-2xl text-center max-w-md mx-4 transform transition-transform duration-500 ${
-          isVisible ? 'scale-100' : 'scale-75'
-        }`}
-      >
-        {/* Seller Image */}
-        <div className="mb-6">
-          <img
-            src={sellerImage || '/placeholder.svg'}
-            alt={sale.seller_name}
-            className="w-32 h-32 rounded-full mx-auto object-cover shadow-lg border-4 border-primary"
-            onError={(e) => {
-              e.currentTarget.src = '/placeholder.svg';
-            }}
-          />
-        </div>
+      {/* Pulsating rings */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="animate-ping absolute w-32 h-32 rounded-full bg-green-400 opacity-20"></div>
+        <div className="animate-ping absolute w-48 h-48 rounded-full bg-green-300 opacity-15" style={{animationDelay: '0.5s'}}></div>
+        <div className="animate-ping absolute w-64 h-64 rounded-full bg-green-200 opacity-10" style={{animationDelay: '1s'}}></div>
+      </div>
 
-        {/* Sale Info */}
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-gray-800">
-            🎉 Grattis {sale.seller_name}!
-          </h2>
-          <p className="text-lg text-gray-600">
-            Sålde {sale.amount_tb.toLocaleString('sv-SE')} TB!
-          </p>
-        </div>
+      {/* Main celebration card */}
+      <div className="relative bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-2xl border-4 border-green-500 max-w-md mx-auto text-center transform transition-all duration-500">
+        {/* Glow effect */}
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-green-400 to-blue-500 opacity-20 blur-xl"></div>
+        
+        {/* Content */}
+        <div className="relative z-10">
+          {/* Success message */}
+          <div className="mb-6">
+            <div className="text-5xl mb-3 animate-bounce">🎉</div>
+            <h2 className="text-2xl font-bold text-green-700 mb-1">GRYM SÄLJ!</h2>
+            <p className="text-sm text-green-600">Fantastisk prestation!</p>
+          </div>
 
-        {/* Celebration emojis */}
-        <div className="mt-4 text-3xl animate-bounce">
-          🎊 🎈 🎉
+          {/* Avatar section */}
+          <div className="mb-6 flex justify-center">
+            <div className="relative">
+              {/* Animated glow ring */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-green-400 via-blue-500 to-purple-500 animate-spin p-1">
+                <div className="w-full h-full rounded-full bg-white"></div>
+              </div>
+              
+              {/* Avatar */}
+              <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-center border-4 border-white shadow-lg">
+                {sellerImage ? (
+                  <img
+                    src={sellerImage}
+                    alt={sale.seller_name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to initials if image fails
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const fallback = target.nextElementSibling as HTMLElement;
+                      if (fallback) {
+                        fallback.style.display = 'flex';
+                      }
+                    }}
+                  />
+                ) : null}
+                
+                {/* Fallback initials */}
+                <div 
+                  className={`w-full h-full flex items-center justify-center ${sellerImage ? 'hidden' : 'flex'}`}
+                  style={{ display: sellerImage ? 'none' : 'flex' }}
+                >
+                  <span className="text-2xl font-bold text-green-700">
+                    {sale.seller_name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seller info */}
+          <div className="space-y-2">
+            <h3 className="text-2xl font-bold text-gray-800">
+              {sale.seller_name}
+            </h3>
+            <div className="bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-2 rounded-full inline-block">
+              <span className="text-xl font-bold">
+                {sale.amount_tb.toLocaleString('sv-SE')} tb
+              </span>
+            </div>
+          </div>
+
+          {/* Sparkle effects */}
+          <div className="absolute top-4 left-4 text-yellow-400 animate-pulse">✨</div>
+          <div className="absolute top-6 right-6 text-yellow-400 animate-pulse" style={{animationDelay: '0.5s'}}>⭐</div>
+          <div className="absolute bottom-8 left-6 text-yellow-400 animate-pulse" style={{animationDelay: '1s'}}>💫</div>
+          <div className="absolute bottom-6 right-4 text-yellow-400 animate-pulse" style={{animationDelay: '1.5s'}}>✨</div>
         </div>
       </div>
     </div>

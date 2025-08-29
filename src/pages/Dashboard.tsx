@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { AudioManager } from '@/components/AudioManager';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import confetti from 'canvas-confetti';
 
 interface Sale {
@@ -20,38 +21,48 @@ interface Seller {
 }
 
 const Dashboard = () => {
-  const [celebrationSale, setCelebrationSale] = useState<Sale | null>(null);
+  const [celebrationQueue, setCelebrationQueue] = useState<{sale: Sale, seller?: Seller}[]>([]);
+  const [currentCelebration, setCurrentCelebration] = useState<{sale: Sale, seller?: Seller} | null>(null);
   const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
   const [currentAudio, setCurrentAudio] = useState<{ soundUrl: string; sellerName: string } | null>(null);
 
-  // Handle new sales with immediate celebration
-  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {    
-    // Always trigger immediate confetti
-    const triggerConfetti = () => {
+  // Process celebration queue
+  const processNextCelebration = useCallback(() => {
+    if (celebrationQueue.length > 0 && !currentCelebration) {
+      const next = celebrationQueue[0];
+      setCelebrationQueue(prev => prev.slice(1));
+      setCurrentCelebration(next);
+      
+      // Start confetti immediately
       confetti({
         particleCount: 120,
         spread: 80,
         origin: { y: 0.6 },
         colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
       });
-    };
-
-    // Start confetti immediately
-    triggerConfetti();
-    
-    // Play seller's audio if available
-    if (seller?.sound_file_url) {
-      setCurrentAudio({ 
-        soundUrl: seller.sound_file_url, 
-        sellerName: seller.name 
-      });
-      setCelebrationAudioDuration(undefined);
-    } else {
-      setCelebrationAudioDuration(3000);
+      
+      // Setup audio if available
+      if (next.seller?.sound_file_url) {
+        setCurrentAudio({ 
+          soundUrl: next.seller.sound_file_url, 
+          sellerName: next.seller.name 
+        });
+        setCelebrationAudioDuration(undefined);
+      } else {
+        setCelebrationAudioDuration(3000);
+      }
     }
-    
-    setCelebrationSale(sale);
+  }, [celebrationQueue, currentCelebration]);
+
+  // Handle new sales - add to queue
+  const handleNewSale = useCallback(async (sale: Sale, seller?: Seller) => {
+    setCelebrationQueue(prev => [...prev, { sale, seller }]);
   }, []);
+
+  // Process queue when it changes
+  useEffect(() => {
+    processNextCelebration();
+  }, [processNextCelebration]);
 
   // Handle seller updates
   const handleSellerUpdate = useCallback(async (updatedSellers: Seller[]) => {
@@ -125,23 +136,27 @@ const Dashboard = () => {
   };
 
   const handleAudioEnded = () => {
+    // Clear current celebration
     setCurrentAudio(null);
     setCelebrationAudioDuration(undefined);
-    setCelebrationSale(null);
+    setCurrentCelebration(null);
+    
+    // Process next in queue after a short delay
+    setTimeout(() => {
+      processNextCelebration();
+    }, 500);
   };
 
-  // Auto-clear celebration after timeout
+  // Auto-clear celebration after timeout (for cases without audio)
   useEffect(() => {
-    if (celebrationSale && celebrationAudioDuration) {
+    if (currentCelebration && celebrationAudioDuration) {
       const timer = setTimeout(() => {
-        setCelebrationSale(null);
-        setCelebrationAudioDuration(undefined);
-        setCurrentAudio(null);
+        handleAudioEnded();
       }, celebrationAudioDuration);
 
       return () => clearTimeout(timer);
     }
-  }, [celebrationSale, celebrationAudioDuration]);
+  }, [currentCelebration, celebrationAudioDuration]);
 
   // Get seller info for celebration
   const getSeller = (sale: Sale) => {
@@ -168,22 +183,15 @@ const Dashboard = () => {
           <h2 className="text-lg font-semibold text-blue-600">Sales Dashboard</h2>
         </div>
 
-        {/* Celebration Display */}
-        {celebrationSale && (
-          <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
-            <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl border-4 border-green-500 animate-pulse">
-              <div className="text-center">
-                <div className="text-6xl mb-4">🎉</div>
-                <h3 className="text-3xl font-bold text-green-700 mb-2">
-                  {celebrationSale.seller_name}
-                </h3>
-                <p className="text-xl text-gray-600">
-                  {celebrationSale.amount_tb.toLocaleString('sv-SE')} tb
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Celebration Overlay with Avatar */}
+        <CelebrationOverlay
+          sale={currentCelebration?.sale || null}
+          sellerImage={currentCelebration?.seller?.profile_image_url}
+          onComplete={handleAudioEnded}
+          audioDuration={celebrationAudioDuration}
+          showBubble={true}
+          showConfetti={true}
+        />
 
         {/* Layout */}
         <div className="flex-1 flex flex-col gap-3 overflow-hidden">
