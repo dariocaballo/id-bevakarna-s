@@ -231,12 +231,14 @@ const Admin = () => {
         console.log('✅ Sound file uploaded:', newSoundUrl);
       }
 
-      // Update database
+      // Update database atomically
       console.log('💾 Updating database...');
       const updateResult = await updateSellerMedia(sellerId, updates);
       if (updateResult.error) {
         throw new Error(`Databas: ${updateResult.error}`);
       }
+
+      const updatedSeller = updateResult.data;
 
       // Remove old files after successful save
       if (Object.keys(updates).length > 0) {
@@ -257,12 +259,12 @@ const Admin = () => {
       // Clear pending changes
       clearPendingChanges(sellerId);
 
-      // Force immediate local update for instant feedback
-      setSellers(prev => prev.map(s => 
-        s.id === sellerId 
-          ? { ...s, ...updates, updated_at: new Date().toISOString() }
-          : s
-      ));
+      // Update local state with DB values (not local updates)
+      if (updatedSeller) {
+        setSellers(prev => prev.map(s => 
+          s.id === sellerId ? updatedSeller : s
+        ));
+      }
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Okänt fel';
@@ -293,13 +295,16 @@ const Admin = () => {
         throw new Error(updateResult.error);
       }
 
+      const updatedSeller = updateResult.data;
+
       toast({ title: "Borttagen", description: "Profilbild har tagits bort" });
       
-      setSellers(prev => prev.map(seller => 
-        seller.id === sellerId 
-          ? { ...seller, profile_image_url: undefined, updated_at: new Date().toISOString() }
-          : seller
-      ));
+      // Update with DB values
+      if (updatedSeller) {
+        setSellers(prev => prev.map(seller => 
+          seller.id === sellerId ? updatedSeller : seller
+        ));
+      }
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Kunde inte ta bort profilbild';
@@ -325,13 +330,16 @@ const Admin = () => {
         throw new Error(updateResult.error);
       }
 
+      const updatedSeller = updateResult.data;
+
       toast({ title: "Borttagen", description: "Ljudfil har tagits bort" });
       
-      setSellers(prev => prev.map(seller => 
-        seller.id === sellerId 
-          ? { ...seller, sound_file_url: undefined, updated_at: new Date().toISOString() }
-          : seller
-      ));
+      // Update with DB values
+      if (updatedSeller) {
+        setSellers(prev => prev.map(seller => 
+          seller.id === sellerId ? updatedSeller : seller
+        ));
+      }
       
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Kunde inte ta bort ljudfil';

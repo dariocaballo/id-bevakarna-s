@@ -195,7 +195,9 @@ const Dashboard = () => {
         {/* Celebration Overlay with Avatar */}
         <CelebrationOverlay
           sale={currentCelebration?.sale || null}
-          sellerImage={currentCelebration?.seller?.profile_image_url}
+          sellerImage={currentCelebration?.seller?.profile_image_url ? 
+            getVersionedUrl(currentCelebration.seller.profile_image_url, currentCelebration.seller.updated_at) || currentCelebration.seller.profile_image_url
+            : undefined}
           onComplete={handleAudioEnded}
           audioDuration={celebrationAudioDuration}
           showBubble={true}

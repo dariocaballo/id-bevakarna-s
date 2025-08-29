@@ -104,17 +104,18 @@ export async function uploadToBucket(
 }
 
 /**
- * Update seller media URLs in database
+ * Update seller media URLs in database with atomic update
  */
 export async function updateSellerMedia(
   sellerId: string, 
-  updates: { profile_image_url?: string; sound_file_url?: string }
-): Promise<{ error?: string }> {
+  updates: { profile_image_url?: string | null; sound_file_url?: string | null }
+): Promise<{ error?: string; data?: any }> {
   console.log(`💾 Updating seller ${sellerId} in database:`, updates);
   
   try {
     const updateTime = new Date().toISOString();
     
+    // Use atomic update with updated_at timestamp
     const { data, error } = await supabase
       .from('sellers')
       .update({ 
@@ -122,15 +123,16 @@ export async function updateSellerMedia(
         updated_at: updateTime
       })
       .eq('id', sellerId)
-      .select();
+      .select()
+      .single();
 
     if (error) {
       console.error('❌ Database update error:', error);
-      throw error;
+      throw new Error(`Databasfel: ${error.message}`);
     }
     
     console.log('✅ Database updated successfully:', data);
-    return {};
+    return { data };
   } catch (error) {
     console.error('❌ Database update failed:', error);
     return { 
