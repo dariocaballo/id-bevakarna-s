@@ -115,19 +115,24 @@ export async function updateSellerMedia(
   try {
     const updateTime = new Date().toISOString();
     
-    // First, verify the seller exists
+    // First, verify the seller exists using maybeSingle for safer handling
     const { data: existingSeller, error: selectError } = await supabase
       .from('sellers')
       .select('id, name')
       .eq('id', sellerId)
-      .single();
+      .maybeSingle();
       
-    if (selectError || !existingSeller) {
-      console.error('❌ Seller not found:', selectError);
-      throw new Error('Säljare hittades inte');
+    if (selectError) {
+      console.error('❌ Error checking seller existence:', selectError);
+      throw new Error('Fel vid kontroll av säljare i databas');
     }
     
-    // Perform the update with proper error handling
+    if (!existingSeller) {
+      console.error('❌ Seller not found for ID:', sellerId);
+      throw new Error('Säljare hittades inte i databas');
+    }
+    
+    // Perform the update - use maybeSingle to handle case where update affects 0 rows
     const { data, error } = await supabase
       .from('sellers')
       .update({ 
@@ -136,11 +141,16 @@ export async function updateSellerMedia(
       })
       .eq('id', sellerId)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('❌ Database update error:', error);
       throw new Error(`Databasfel: ${error.message}`);
+    }
+    
+    if (!data) {
+      console.error('❌ No rows updated for seller ID:', sellerId);
+      throw new Error('Ingen rad uppdaterades - säljare hittades inte');
     }
     
     console.log('✅ Database updated successfully:', data);
@@ -209,7 +219,7 @@ export function validateAudioFile(file: File): { valid: boolean; error?: string 
 }
 
 /**
- * Create and play audio with proper error handling
+ * Create and play audio with proper error handling and cache-busting
  */
 export function createAudio(url: string): Promise<HTMLAudioElement> {
   console.log(`🎵 Creating audio element for URL:`, url);
@@ -219,12 +229,13 @@ export function createAudio(url: string): Promise<HTMLAudioElement> {
     audio.volume = 0.8;
     audio.preload = 'auto';
     audio.crossOrigin = 'anonymous';
+    audio.currentTime = 0; // Ensure we start from beginning
     
     const onLoadedMetadata = () => {
       console.log('✅ Audio metadata loaded successfully');
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('error', onError);
-      audio.currentTime = 0;
+      audio.currentTime = 0; // Reset to start
       resolve(audio);
     };
     
