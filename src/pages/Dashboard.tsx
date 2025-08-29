@@ -50,8 +50,9 @@ const Dashboard = () => {
       
       // Setup audio if available
       if (next.seller?.sound_file_url) {
+        const cacheBustedUrl = getVersionedUrl(next.seller.sound_file_url, next.seller.updated_at) || next.seller.sound_file_url;
         setCurrentAudio({ 
-          soundUrl: next.seller.sound_file_url, 
+          soundUrl: cacheBustedUrl, 
           sellerName: next.seller.name,
           sale: next.sale,
           updatedAt: next.seller.updated_at

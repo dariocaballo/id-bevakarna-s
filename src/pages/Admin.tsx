@@ -156,20 +156,26 @@ const Admin = () => {
       // Remove old profile images
       if (currentImageUrl) {
         const url = new URL(currentImageUrl);
-        const filename = url.pathname.split('/').pop()?.split('?')[0];
+        const pathParts = url.pathname.split('/');
+        const filename = pathParts.pop()?.split('?')[0];
         if (filename && filename.startsWith(sellerId)) {
-          await supabase.storage.from('seller-profiles').remove([filename]);
-          console.log(`✅ Removed old profile image: ${filename}`);
+          // Use the correct folder structure
+          const filePathInBucket = `profiles/${filename}`;
+          await supabase.storage.from('seller-profiles').remove([filePathInBucket]);
+          console.log(`✅ Removed old profile image: ${filePathInBucket}`);
         }
       }
 
       // Remove old sound files
       if (currentSoundUrl) {
         const url = new URL(currentSoundUrl);
-        const filename = url.pathname.split('/').pop()?.split('?')[0];
+        const pathParts = url.pathname.split('/');
+        const filename = pathParts.pop()?.split('?')[0];
         if (filename && filename.startsWith(sellerId)) {
-          await supabase.storage.from('seller-sounds').remove([filename]);
-          console.log(`✅ Removed old sound file: ${filename}`);
+          // Use the correct folder structure
+          const filePathInBucket = `sounds/${filename}`;
+          await supabase.storage.from('seller-sounds').remove([filePathInBucket]);
+          console.log(`✅ Removed old sound file: ${filePathInBucket}`);
         }
       }
     } catch (error) {

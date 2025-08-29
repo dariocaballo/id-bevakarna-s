@@ -32,23 +32,25 @@ export async function uploadToBucket(
   });
 
   try {
-    // Remove existing files for this seller
-    console.log(`🗑️ Checking for existing files in ${bucketName}...`);
+    // Determine folder and filename based on bucket type
+    const isProfileImage = bucketName === 'seller-profiles';
+    const folder = isProfileImage ? 'profiles' : 'sounds';
+    const timestamp = Date.now();
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || (isProfileImage ? 'jpg' : 'mp3');
+    const fileName = `${folder}/${sellerId}-${timestamp}.${fileExt}`;
+
+    console.log(`📤 Uploading file as: ${fileName}`);
+
+    // Remove existing files for this seller first
+    console.log(`🗑️ Checking for existing files in ${bucketName}/${folder}...`);
     const { data: existingFiles, error: listError } = await supabase.storage
       .from(bucketName)
-      .list('');
+      .list(folder);
 
-    if (listError) {
-      console.error('❌ Error listing files:', listError);
-      throw listError;
-    }
-
-    console.log(`📁 Found ${existingFiles?.length || 0} files in bucket`);
-
-    if (existingFiles) {
+    if (!listError && existingFiles) {
       const filesToRemove = existingFiles
         .filter(f => f.name.startsWith(sellerId))
-        .map(f => f.name);
+        .map(f => `${folder}/${f.name}`);
       
       console.log(`🗑️ Files to remove for seller ${sellerId}:`, filesToRemove);
       
@@ -66,18 +68,11 @@ export async function uploadToBucket(
       }
     }
 
-    // Create unique filename with timestamp
-    const timestamp = Date.now();
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || (bucketName.includes('sound') ? 'mp3' : 'jpg');
-    const fileName = `${sellerId}-${timestamp}.${fileExt}`;
-
-    console.log(`📤 Uploading file as: ${fileName}`);
-
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucketName)
       .upload(fileName, file, { 
-        upsert: false,
-        contentType: file.type || (bucketName.includes('sound') ? 'audio/mpeg' : 'image/jpeg')
+        upsert: true,
+        contentType: file.type || (isProfileImage ? 'image/jpeg' : 'audio/mpeg')
       });
 
     if (uploadError) {
@@ -108,31 +103,14 @@ export async function uploadToBucket(
  */
 export async function updateSellerMedia(
   sellerId: string, 
-  updates: { profile_image_url?: string; sound_file_url?: string }
+  updates: { profile_image_url?: string | null; sound_file_url?: string | null }
 ): Promise<{ data?: any; error?: string }> {
   console.log(`💾 Updating seller ${sellerId} in database:`, updates);
   
   try {
     const updateTime = new Date().toISOString();
     
-    // First, verify the seller exists using maybeSingle for safer handling
-    const { data: existingSeller, error: selectError } = await supabase
-      .from('sellers')
-      .select('id, name')
-      .eq('id', sellerId)
-      .maybeSingle();
-      
-    if (selectError) {
-      console.error('❌ Error checking seller existence:', selectError);
-      throw new Error('Fel vid kontroll av säljare i databas');
-    }
-    
-    if (!existingSeller) {
-      console.error('❌ Seller not found for ID:', sellerId);
-      throw new Error('Säljare hittades inte i databas');
-    }
-    
-    // Perform the update - use maybeSingle to handle case where update affects 0 rows
+    // Perform the update directly with proper error handling
     const { data, error } = await supabase
       .from('sellers')
       .update({ 
@@ -141,16 +119,11 @@ export async function updateSellerMedia(
       })
       .eq('id', sellerId)
       .select('*')
-      .maybeSingle();
+      .single();
 
     if (error) {
       console.error('❌ Database update error:', error);
       throw new Error(`Databasfel: ${error.message}`);
-    }
-    
-    if (!data) {
-      console.error('❌ No rows updated for seller ID:', sellerId);
-      throw new Error('Ingen rad uppdaterades - säljare hittades inte');
     }
     
     console.log('✅ Database updated successfully:', data);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getVersionedUrl } from '@/utils/media';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Sale {
@@ -15,6 +16,7 @@ interface Seller {
   name: string;
   profile_image_url?: string;
   sound_file_url?: string;
+  updated_at?: string;
 }
 
 interface UseRealtimeDataReturn {
@@ -120,7 +122,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
           return {
             name,
             amount: data.amount,
-            imageUrl: seller?.profile_image_url
+            imageUrl: seller?.profile_image_url ? getVersionedUrl(seller.profile_image_url, seller.updated_at) : undefined
           };
         })
         .sort((a, b) => b.amount - a.amount)
@@ -141,7 +143,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
           return {
             name,
             amount: data.amount,
-            imageUrl: seller?.profile_image_url
+            imageUrl: seller?.profile_image_url ? getVersionedUrl(seller.profile_image_url, seller.updated_at) : undefined
           };
         })
         .sort((a, b) => b.amount - a.amount);
