@@ -116,6 +116,20 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_daily_totals: {
+        Args: { target_date?: string }
+        Returns: {
+          seller_totals: Json
+          total_today: number
+        }[]
+      }
+      get_monthly_totals: {
+        Args: { target_month?: string }
+        Returns: {
+          seller_totals: Json
+          total_month: number
+        }[]
+      }
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
