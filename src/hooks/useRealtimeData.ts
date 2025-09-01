@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getVersionedUrl } from '@/utils/media';
@@ -69,7 +69,6 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       
       return sellersData;
     } catch (error) {
-      console.error('❌ Error loading sellers:', error);
       return [];
     }
   }, []);
@@ -78,95 +77,85 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
     try {
       const currentSellers = sellersData || sellersCache.current;
       
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      // Get all sales
-      const { data: allSales, error } = await supabase
-        .from('sales')
-        .select('*')
-        .order('timestamp', { ascending: false });
+      // Use server-side aggregation for better performance
+      const [dailyResult, monthlyResult] = await Promise.all([
+        supabase.rpc('get_daily_totals'),
+        supabase.rpc('get_monthly_totals')
+      ]);
 
-      if (error) throw error;
+      if (dailyResult.error) throw dailyResult.error;
+      if (monthlyResult.error) throw monthlyResult.error;
 
-      const sales = allSales || [];
+      const dailyData = dailyResult.data?.[0];
+      const monthlyData = monthlyResult.data?.[0];
       
-      // Filter sales by date ranges
-      const todaysSales = sales.filter((sale: Sale) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= today;
-      });
-      
-      const monthsSales = sales.filter((sale: Sale) => {
-        const saleDate = new Date(sale.timestamp);
-        return saleDate >= monthStart;
-      });
-      
-      // Calculate totals
-      const todaysTotal = todaysSales.reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
-      const monthsTotal = monthsSales.reduce((sum: number, sale: Sale) => sum + sale.amount_tb, 0);
-      
-      // Calculate seller rankings for the month
-      const monthlySellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      monthsSales.forEach((sale: Sale) => {
-        if (!monthlySellerTotals[sale.seller_name]) {
-          monthlySellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        monthlySellerTotals[sale.seller_name].amount += sale.amount_tb;
-      });
-      
-      const topSellersArray = Object.entries(monthlySellerTotals)
-        .map(([name, data]) => {
-          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
-          return {
-            name,
-            amount: data.amount,
-            imageUrl: seller?.profile_image_url ? getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url : undefined
-          };
-        })
-        .sort((a, b) => b.amount - a.amount)
-        .slice(0, 10);
-      
-      // Calculate today's sellers
-      const todaysSellerTotals: { [key: string]: { amount: number, sellerId?: string } } = {};
-      todaysSales.forEach((sale: Sale) => {
-        if (!todaysSellerTotals[sale.seller_name]) {
-          todaysSellerTotals[sale.seller_name] = { amount: 0, sellerId: sale.seller_id };
-        }
-        todaysSellerTotals[sale.seller_name].amount += sale.amount_tb;
-      });
-      
-      const todaysSellersArray = Object.entries(todaysSellerTotals)
-        .map(([name, data]) => {
-          const seller = currentSellers.find(s => s.id === data.sellerId || s.name.toLowerCase() === name.toLowerCase());
-          return {
-            name,
-            amount: data.amount,
-            imageUrl: seller?.profile_image_url ? getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url : undefined
-          };
-        })
-        .sort((a, b) => b.amount - a.amount);
+      // Process today's sellers
+      const todaysSellersArray = Array.isArray(dailyData?.seller_totals) 
+        ? (dailyData.seller_totals as any[])
+          .map((sellerData: any) => {
+            const seller = currentSellers.find(s => 
+              s.id === sellerData.seller_id || 
+              s.name.toLowerCase() === sellerData.seller_name.toLowerCase()
+            );
+            return {
+              name: sellerData.seller_name,
+              amount: Number(sellerData.amount),
+              imageUrl: seller?.profile_image_url ? 
+                getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url 
+                : undefined
+            };
+          })
+          .sort((a: any, b: any) => b.amount - a.amount)
+        : [];
+
+      // Process monthly top sellers
+      const topSellersArray = Array.isArray(monthlyData?.seller_totals)
+        ? (monthlyData.seller_totals as any[])
+          .map((sellerData: any) => {
+            const seller = currentSellers.find(s => 
+              s.id === sellerData.seller_id || 
+              s.name.toLowerCase() === sellerData.seller_name.toLowerCase()
+            );
+            return {
+              name: sellerData.seller_name,
+              amount: Number(sellerData.amount),
+              imageUrl: seller?.profile_image_url ? 
+                getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url 
+                : undefined
+            };
+          })
+          .sort((a: any, b: any) => b.amount - a.amount)
+          .slice(0, 10)
+        : [];
 
       // Update state only if component is still mounted
       if (isMountedRef.current) {
-        setTotalToday(todaysTotal);
-        setTotalMonth(monthsTotal);
+        setTotalToday(Number(dailyData?.total_today) || 0);
+        setTotalMonth(Number(monthlyData?.total_month) || 0);
         setTopSellers(topSellersArray);
         setTodaysSellers(todaysSellersArray);
       }
       
     } catch (error) {
-      console.error('❌ Error loading sales data:', error);
+      // Silent error - no console.log for production
+      if (isMountedRef.current) {
+        setTotalToday(0);
+        setTotalMonth(0);
+        setTopSellers([]);
+        setTodaysSellers([]);
+      }
     }
   }, []);
 
   const setupRealtimeSubscription = useCallback(() => {
     channelRef.current = supabase
       .channel('dashboard-realtime')
+      .on('presence', { event: 'sync' }, () => {
+        // Handle presence sync - keep connection alive
+      })
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
+        { event: 'INSERT', schema: 'public', table: 'sales' },
         async (payload) => {
           if (payload.eventType === 'INSERT' && isMountedRef.current) {
             const newSale = payload.new as Sale;
@@ -182,13 +171,13 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
             }
           }
           
-          // Refresh sales data
+          // Refresh sales data efficiently
           await loadSalesData();
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sellers' },
+        { event: 'UPDATE', schema: 'public', table: 'sellers' },
         async (payload) => {
           const sellersData = await loadSellers();
           await loadSalesData(sellersData);
@@ -199,16 +188,36 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         }
       )
       .subscribe();
+
+    // Keep connection alive with heartbeat
+    const heartbeatInterval = setInterval(() => {
+      if (channelRef.current) {
+        channelRef.current.track({ last_seen: new Date().toISOString() });
+      }
+    }, 30000);
+
+    return () => clearInterval(heartbeatInterval);
   }, [loadSalesData, loadSellers, onNewSale, onSellerUpdate]);
 
   const refreshData = useCallback(async () => {
-    console.log('🔄 Refreshing all data...');
     const sellersData = await loadSellers();
     await loadSalesData(sellersData);
-    setSettings({}); // No settings implemented yet
+    setSettings({});
     setIsLoading(false);
-    console.log('✅ Data refresh complete');
   }, [loadSellers, loadSalesData]);
+
+  // Handle visibility change for reconnection
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isMountedRef.current) {
+        // Re-sync data when page becomes visible
+        refreshData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refreshData]);
 
   // Initialize data and setup real-time subscriptions
   useEffect(() => {
@@ -218,13 +227,15 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
     refreshData();
 
     // Setup real-time subscription
-    setupRealtimeSubscription();
+    const cleanupHeartbeat = setupRealtimeSubscription();
 
-    // Setup auto-refresh interval if enabled
+    // Setup auto-refresh interval if enabled - reduced frequency
     if (enableAutoRefresh) {
       refreshIntervalRef.current = setInterval(() => {
-        loadSalesData();
-      }, refreshInterval);
+        if (!document.hidden && isMountedRef.current) {
+          loadSalesData();
+        }
+      }, Math.max(refreshInterval, 60000)); // Minimum 1 minute
     }
 
     // Cleanup function
@@ -237,6 +248,10 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
+      }
+
+      if (cleanupHeartbeat) {
+        cleanupHeartbeat();
       }
     };
   }, []);

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { AudioManager } from '@/components/AudioManager';
@@ -32,6 +32,8 @@ const Dashboard = () => {
     sale: Sale;
     updatedAt?: string;
   } | null>(null);
+  const [audioStarted, setAudioStarted] = useState(false);
+  const confettiIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Use realtime data hook with TV-optimized settings
   const {
@@ -44,14 +46,13 @@ const Dashboard = () => {
     isLoading
   } = useRealtimeData({
     onNewSale: useCallback(async (sale: Sale, seller?: Seller) => {
-      console.log('🎉 New sale received:', sale);
       setCelebrationQueue(prev => [...prev, { sale, seller }]);
     }, []),
     onSellerUpdate: useCallback(async (updatedSellers: Seller[]) => {
       // Seller data updated - no specific action needed
     }, []),
     enableAutoRefresh: true,
-    refreshInterval: 10000
+    refreshInterval: 30000
   });
 
   // Enhanced seller matching when processing celebrations
@@ -60,66 +61,73 @@ const Dashboard = () => {
       const next = celebrationQueue[0];
       setCelebrationQueue(prev => prev.slice(1));
       
-      // Stop any current audio immediately
+      // Stop any current audio/confetti immediately
       if (currentAudio) {
-        console.log('🛑 Stopping current audio for new celebration');
         setCurrentAudio(null);
         setCelebrationAudioDuration(undefined);
+      }
+      if (confettiIntervalRef.current) {
+        clearInterval(confettiIntervalRef.current);
+        confettiIntervalRef.current = null;
       }
       
       // Enhanced seller matching using latest sellers data
       let matchedSeller = next.seller;
       if (!matchedSeller && next.sale.seller_id && sellers.length > 0) {
         matchedSeller = sellers.find(s => s.id === next.sale.seller_id);
-        console.log('🔍 Found seller by ID:', matchedSeller?.name);
       }
       if (!matchedSeller && next.sale.seller_name && sellers.length > 0) {
         matchedSeller = sellers.find(s => s.name.toLowerCase() === next.sale.seller_name.toLowerCase());
-        console.log('🔍 Found seller by name:', matchedSeller?.name);
       }
       
       const enhancedNext = { ...next, seller: matchedSeller };
       setCurrentCelebration(enhancedNext);
-      console.log('🎊 Starting celebration for seller:', enhancedNext.sale.seller_name);
-      console.log('🎯 Matched seller data:', {
-        id: matchedSeller?.id,
-        name: matchedSeller?.name,
-        hasSound: !!matchedSeller?.sound_file_url,
-        soundUrl: matchedSeller?.sound_file_url,
-        updatedAt: matchedSeller?.updated_at
-      });
-      
-      // Start confetti immediately when celebration begins
-      confetti({
-        particleCount: 120,
-        spread: 80,
-        origin: { y: 0.6 },
-        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
-      });
+      setAudioStarted(false);
       
       // Setup audio if available with proper cache busting
       if (matchedSeller?.sound_file_url) {
         const audioUrl = matchedSeller.sound_file_url;
-        const versionedUrl = getVersionedUrl(audioUrl, matchedSeller.updated_at) || audioUrl;
-        console.log('🔊 Setting up audio playback:');
-        console.log('  - Original URL:', audioUrl);
-        console.log('  - Versioned URL:', versionedUrl);
-        console.log('  - Updated at:', matchedSeller.updated_at);
         
-        // Set up audio immediately - AudioManager will handle autoplay/user activation
+        // Set up audio - confetti will start when audio starts playing
         setCurrentAudio({ 
-          soundUrl: audioUrl, // Use original URL, AudioManager will handle versioning
+          soundUrl: audioUrl,
           sellerName: matchedSeller.name,
           sale: enhancedNext.sale,
           updatedAt: matchedSeller.updated_at
         });
         setCelebrationAudioDuration(undefined); // Will be set by AudioManager
       } else {
-        console.log('⚠️ No sound file available for seller:', enhancedNext.sale.seller_name);
-        setCelebrationAudioDuration(3000); // Default duration when no audio
+        // No audio - start confetti immediately with default duration
+        startConfetti();
+        setCelebrationAudioDuration(3000);
       }
     }
   }, [celebrationQueue, currentCelebration, currentAudio, sellers]);
+
+  // Start confetti animation
+  const startConfetti = useCallback(() => {
+    if (confettiIntervalRef.current) {
+      clearInterval(confettiIntervalRef.current);
+    }
+
+    // Initial burst
+    confetti({
+      particleCount: 120,
+      spread: 80,
+      origin: { y: 0.6 },
+      colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+    });
+
+    // Continuous light confetti during audio
+    confettiIntervalRef.current = setInterval(() => {
+      confetti({
+        particleCount: 30,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+      });
+    }, 800);
+  }, []);
 
   // Process queue when it changes
   useEffect(() => {
@@ -127,7 +135,7 @@ const Dashboard = () => {
   }, [processNextCelebration]);
 
 
-  // Optimized image rendering
+  // Memoized components for performance
   const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }) => {
     if (!seller.imageUrl) {
       return (
@@ -154,52 +162,74 @@ const Dashboard = () => {
     );
   }, []);
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = useMemo(() => (amount: number) => {
     return new Intl.NumberFormat('sv-SE', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount) + ' tb';
-  };
+  }, []);
 
-  const getMedalIcon = (index: number) => {
+  const getMedalIcon = useMemo(() => (index: number) => {
     switch (index) {
       case 0: return '🥇';
-      case 1: return '🥈';
+      case 1: return '🥈'; 
       case 2: return '🥉';
       case 3: return '🏅';
       case 4: return '🏅';
       default: return '';
     }
-  };
+  }, []);
 
-  const handleAudioDurationChange = (duration: number) => {
+
+  const handleAudioStarted = useCallback(() => {
+    if (!audioStarted) {
+      setAudioStarted(true);
+      startConfetti();
+    }
+  }, [audioStarted, startConfetti]);
+
+  const handleAudioDurationChange = useCallback((duration: number) => {
     setCelebrationAudioDuration(duration * 1000);
-  };
+  }, []);
 
-  const handleAudioEnded = () => {
-    console.log('🎵 Audio ended, clearing celebration');
-    
+  const handleAudioEnded = useCallback(() => {
     // Clear current celebration immediately
     setCurrentAudio(null);
     setCelebrationAudioDuration(undefined);
     setCurrentCelebration(null);
+    setAudioStarted(false);
+    
+    // Stop confetti
+    if (confettiIntervalRef.current) {
+      clearInterval(confettiIntervalRef.current);
+      confettiIntervalRef.current = null;
+    }
     
     // Process next in queue after a short delay to allow UI cleanup
     setTimeout(() => {
       processNextCelebration();
     }, 300);
-  };
+  }, [processNextCelebration]);
 
   // Auto-clear celebration after timeout (for cases without audio)
   useEffect(() => {
-    if (currentCelebration && celebrationAudioDuration) {
+    if (currentCelebration && celebrationAudioDuration && !currentAudio) {
       const timer = setTimeout(() => {
         handleAudioEnded();
       }, celebrationAudioDuration);
 
       return () => clearTimeout(timer);
     }
-  }, [currentCelebration, celebrationAudioDuration]);
+  }, [currentCelebration, celebrationAudioDuration, currentAudio, handleAudioEnded]);
+
+  // Cleanup confetti on unmount
+  useEffect(() => {
+    return () => {
+      if (confettiIntervalRef.current) {
+        clearInterval(confettiIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Get seller info for celebration
   const getSeller = (sale: Sale) => {
@@ -322,6 +352,7 @@ const Dashboard = () => {
           soundUrl={currentAudio.soundUrl}
           onEnded={handleAudioEnded}
           onDurationChange={handleAudioDurationChange}
+          onStarted={handleAudioStarted}
           autoPlay={true}
           sellerName={currentAudio.sellerName}
           key={`${currentAudio.sale.id}-${currentAudio.updatedAt || Date.now()}`}

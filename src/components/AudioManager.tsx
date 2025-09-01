@@ -7,6 +7,7 @@ interface AudioManagerProps {
   soundUrl?: string;
   onEnded?: () => void;
   onDurationChange?: (duration: number) => void;
+  onStarted?: () => void;
   autoPlay?: boolean;
   sellerName?: string;
 }
@@ -15,6 +16,7 @@ export const AudioManager = ({
   soundUrl, 
   onEnded, 
   onDurationChange, 
+  onStarted,
   autoPlay = false,
   sellerName 
 }: AudioManagerProps) => {
@@ -29,18 +31,16 @@ export const AudioManager = ({
     if (!audioContextRef.current) {
       try {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log('🎵 AudioContext initialized');
       } catch (error) {
-        console.error('❌ Failed to initialize AudioContext:', error);
+        // AudioContext initialization failed
       }
     }
     
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
       try {
         await audioContextRef.current.resume();
-        console.log('🎵 AudioContext resumed');
       } catch (error) {
-        console.error('❌ Failed to resume AudioContext:', error);
+        // AudioContext resume failed
       }
     }
   };
@@ -51,12 +51,12 @@ export const AudioManager = ({
     const audio = audioRef.current;
     let isCurrentEffect = true;
     
-    console.log('🔊 Setting up audio for:', sellerName, 'URL:', soundUrl);
+    // Setting up audio for seller
     
     const handleLoadedMetadata = () => {
       if (!isCurrentEffect) return;
       
-      console.log('✅ Audio metadata loaded, duration:', audio.duration);
+      // Audio metadata loaded
       
       // Always reset to start and report duration
       audio.currentTime = 0;
@@ -73,7 +73,6 @@ export const AudioManager = ({
 
     const handleCanPlayThrough = () => {
       if (!isCurrentEffect) return;
-      console.log('✅ Audio can play through');
       // Ensure we're at the beginning and try to play
       audio.currentTime = 0;
       if (autoPlay && soundEnabled) {
@@ -83,7 +82,6 @@ export const AudioManager = ({
 
     const handleEnded = () => {
       if (!isCurrentEffect) return;
-      console.log('🎵 Audio playback ended');
       setShowActivationButton(false);
       setAudioError(null);
       onEnded?.();
@@ -91,29 +89,26 @@ export const AudioManager = ({
 
     const handleError = (e: Event) => {
       if (!isCurrentEffect) return;
-      console.error('❌ Audio error:', e);
       setAudioError('Ljudfilen kunde inte laddas');
       setTimeout(() => onEnded?.(), 100);
     };
 
     const handlePlay = () => {
       if (!isCurrentEffect) return;
-      console.log('▶️ Audio started playing');
       setShowActivationButton(false);
       setAudioError(null);
+      onStarted?.();
     };
 
     const handlePause = () => {
       if (!isCurrentEffect) return;
-      console.log('⏸️ Audio paused');
+      // Audio paused - no action needed
     };
 
     const attemptPlay = async () => {
       if (!audio || !isCurrentEffect) return;
       
       try {
-        console.log('🎯 Attempting to play audio...');
-        
         // Ensure we start from the beginning
         audio.currentTime = 0;
         
@@ -121,12 +116,11 @@ export const AudioManager = ({
         await initializeAudioContext();
         
         // Wait a bit to ensure audio is ready
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50));
         
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           await playPromise;
-          console.log('✅ Audio play successful');
           if (isCurrentEffect) {
             setShowActivationButton(false);
             setAudioError(null);
@@ -136,15 +130,11 @@ export const AudioManager = ({
       } catch (error: any) {
         if (!isCurrentEffect) return;
         
-        console.error('❌ Audio play failed:', error);
-        
         if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
           setShowActivationButton(true);
           setAudioError('Klicka för att aktivera ljud');
-          console.log('🔇 Autoplay blocked - showing activation button');
         } else {
           setAudioError('Ljudfel - fortsätter utan ljud');
-          console.error('❌ Audio playback error:', error);
           setTimeout(() => onEnded?.(), 100);
         }
       }
@@ -170,10 +160,6 @@ export const AudioManager = ({
     const versionedUrl = soundUrl.includes('?v=') ? soundUrl : `${soundUrl}?v=${Date.now()}`;
     audio.src = versionedUrl;
     audio.load();
-    
-    console.log('🎵 Audio element configured and loading:');
-    console.log('  - Original URL:', soundUrl);
-    console.log('  - Final URL:', versionedUrl);
 
     return () => {
       isCurrentEffect = false;
@@ -185,9 +171,8 @@ export const AudioManager = ({
       audio.removeEventListener('pause', handlePause);
       audio.pause();
       audio.currentTime = 0;
-      console.log('🧹 Audio cleanup completed');
     };
-  }, [soundUrl, onEnded, onDurationChange, autoPlay, sellerName, soundEnabled]);
+  }, [soundUrl, onEnded, onDurationChange, onStarted, autoPlay, sellerName, soundEnabled]);
 
   const handleUserActivation = async () => {
     if (!audioRef.current) return;
@@ -195,8 +180,6 @@ export const AudioManager = ({
     const audio = audioRef.current;
     
     try {
-      console.log('👆 User activated audio');
-      
       // Initialize AudioContext
       await initializeAudioContext();
       
@@ -209,13 +192,11 @@ export const AudioManager = ({
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         await playPromise;
-        console.log('✅ User-activated audio play successful');
       }
       
       setShowActivationButton(false);
       setAudioError(null);
     } catch (error) {
-      console.error('❌ User-activated audio play failed:', error);
       setAudioError('Kan inte spela ljud');
       setTimeout(() => onEnded?.(), 100);
     }
