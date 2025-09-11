@@ -5,6 +5,7 @@ import { AudioManager } from '@/components/AudioManager';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import confetti from 'canvas-confetti';
 import { getVersionedUrl } from '@/utils/media';
+import { MonthlySalesModal } from '@/components/MonthlySalesModal';
 
 interface Sale {
   id: string;
@@ -34,6 +35,7 @@ const Dashboard = () => {
   } | null>(null);
   const [audioStarted, setAudioStarted] = useState(false);
   const confettiIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [selectedSeller, setSelectedSeller] = useState<{name: string, amount: number} | null>(null);
 
   // Use realtime data hook with TV-optimized settings
   const {
@@ -332,7 +334,11 @@ const Dashboard = () => {
             <CardContent className="overflow-y-auto">
               <div className="space-y-2">
                 {topSellers.slice(0, 10).map((seller, index) => (
-                  <div key={seller.name} className="flex items-center justify-between">
+                  <div 
+                    key={seller.name} 
+                    className="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                    onClick={() => setSelectedSeller(seller)}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-600">{index + 1}.</span>
                       <span className="font-semibold text-slate-800 text-sm">{seller.name}</span>
@@ -358,6 +364,14 @@ const Dashboard = () => {
           key={`${currentAudio.sale.id}-${currentAudio.updatedAt || Date.now()}`}
         />
       )}
+
+      {/* Monthly Sales Modal */}
+      <MonthlySalesModal
+        isOpen={!!selectedSeller}
+        onClose={() => setSelectedSeller(null)}
+        sellerName={selectedSeller?.name || ''}
+        totalAmount={selectedSeller?.amount || 0}
+      />
     </div>
   );
 };

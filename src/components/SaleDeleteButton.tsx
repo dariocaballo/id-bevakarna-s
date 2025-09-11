@@ -89,7 +89,7 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
           <AlertDialogTitle>Ta bort försäljning?</AlertDialogTitle>
           <AlertDialogDescription>
             Är du säker på att du vill ta bort {sellerName}s försäljning på {amount.toLocaleString('sv-SE')} tb?
-            Denna åtgärd kan inte ångras och kommer att uppdatera alla summor automatiskt via realtid.
+            Detta påverkar månads- och dagsstatistiken. Denna åtgärd kan inte ångras.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

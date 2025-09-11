@@ -155,7 +155,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       })
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'sales' },
+        { event: '*', schema: 'public', table: 'sales' },
         async (payload) => {
           if (payload.eventType === 'INSERT' && isMountedRef.current) {
             const newSale = payload.new as Sale;
@@ -171,7 +171,7 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
             }
           }
           
-          // Refresh sales data efficiently
+          // Refresh sales data efficiently for all events (INSERT, UPDATE, DELETE)
           await loadSalesData();
         }
       )
