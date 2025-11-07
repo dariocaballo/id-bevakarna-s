@@ -26,23 +26,37 @@ const Sales = () => {
   const [todaysSales, setTodaysSales] = useState<any[]>([]);
   const { toast } = useToast();
 
-  // Load sellers from database
-  const loadSellers = async () => {
+  // Load sellers from database with retry logic
+  const loadSellers = async (retryCount = 0): Promise<void> => {
     try {
       const { data, error } = await supabase
         .from('sellers')
         .select('*')
         .order('name');
       
-      if (error) throw error;
+      if (error) {
+        // Retry with exponential backoff for connection issues
+        if (retryCount < 3 && (error.code === 'PGRST002' || error.message?.includes('schema cache'))) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return loadSellers(retryCount + 1);
+        }
+        throw error;
+      }
+      
       setSellers(data || []);
     } catch (error) {
       console.error('Error loading sellers:', error);
       toast({
         title: "Fel",
-        description: "Kunde inte ladda säljare",
+        description: "Kunde inte ladda säljare. Försöker igen...",
         variant: "destructive"
       });
+      
+      // Keep trying in background if initial load fails
+      if (retryCount === 0) {
+        setTimeout(() => loadSellers(1), 2000);
+      }
     }
   };
 
