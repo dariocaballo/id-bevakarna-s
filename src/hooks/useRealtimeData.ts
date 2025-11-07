@@ -55,10 +55,18 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
   const isMountedRef = useRef(true);
   const sellersCache = useRef<Seller[]>([]);
 
-  const loadSellers = useCallback(async (): Promise<Seller[]> => {
+  const loadSellers = useCallback(async (retryCount = 0): Promise<Seller[]> => {
     try {
       const { data, error } = await supabase.from('sellers').select('*').order('name');
-      if (error) throw error;
+      if (error) {
+        // Retry with exponential backoff for connection issues
+        if (retryCount < 3 && (error.code === 'PGRST002' || error.message?.includes('schema cache'))) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return loadSellers(retryCount + 1);
+        }
+        throw error;
+      }
       
       const sellersData = data || [];
       sellersCache.current = sellersData;
@@ -69,11 +77,13 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       
       return sellersData;
     } catch (error) {
-      return [];
+      console.error('Error loading sellers:', error);
+      // Return cached data if available, otherwise empty array
+      return sellersCache.current.length > 0 ? sellersCache.current : [];
     }
   }, []);
 
-  const loadSalesData = useCallback(async (sellersData?: Seller[]) => {
+  const loadSalesData = useCallback(async (sellersData?: Seller[], retryCount = 0) => {
     try {
       const currentSellers = sellersData || sellersCache.current;
       
@@ -83,8 +93,23 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
         supabase.rpc('get_monthly_totals')
       ]);
 
-      if (dailyResult.error) throw dailyResult.error;
-      if (monthlyResult.error) throw monthlyResult.error;
+      // Retry with exponential backoff for connection issues
+      if (dailyResult.error) {
+        if (retryCount < 3 && (dailyResult.error.code === 'PGRST002' || dailyResult.error.message?.includes('schema cache'))) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return loadSalesData(sellersData, retryCount + 1);
+        }
+        throw dailyResult.error;
+      }
+      if (monthlyResult.error) {
+        if (retryCount < 3 && (monthlyResult.error.code === 'PGRST002' || monthlyResult.error.message?.includes('schema cache'))) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return loadSalesData(sellersData, retryCount + 1);
+        }
+        throw monthlyResult.error;
+      }
 
       const dailyData = dailyResult.data?.[0];
       const monthlyData = monthlyResult.data?.[0];
@@ -137,15 +162,19 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       }
       
     } catch (error) {
-      // Silent error - no console.log for production
+      console.error('Error loading sales:', error);
+      // Keep existing data if available, otherwise show zeros
       if (isMountedRef.current) {
-        setTotalToday(0);
-        setTotalMonth(0);
-        setTopSellers([]);
-        setTodaysSellers([]);
+        // Don't reset to zero if we already have data - keep it stable
+        if (totalToday === 0 && totalMonth === 0) {
+          setTotalToday(0);
+          setTotalMonth(0);
+          setTopSellers([]);
+          setTodaysSellers([]);
+        }
       }
     }
-  }, []);
+  }, [totalToday, totalMonth]);
 
   const setupRealtimeSubscription = useCallback(() => {
     channelRef.current = supabase
@@ -200,10 +229,16 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
   }, [loadSalesData, loadSellers, onNewSale, onSellerUpdate]);
 
   const refreshData = useCallback(async () => {
-    const sellersData = await loadSellers();
-    await loadSalesData(sellersData);
-    setSettings({});
-    setIsLoading(false);
+    try {
+      const sellersData = await loadSellers();
+      await loadSalesData(sellersData);
+      setSettings({});
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      // Always set loading to false after first attempt
+      setIsLoading(false);
+    }
   }, [loadSellers, loadSalesData]);
 
   // Handle visibility change for reconnection
