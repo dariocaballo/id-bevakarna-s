@@ -34,7 +34,9 @@ const Dashboard = () => {
     updatedAt?: string;
   } | null>(null);
   const [audioStarted, setAudioStarted] = useState(false);
+  const [forceShowDashboard, setForceShowDashboard] = useState(false);
   const confettiIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedSeller, setSelectedSeller] = useState<{name: string, amount: number} | null>(null);
 
   // Use realtime data hook with TV-optimized settings
@@ -48,14 +50,31 @@ const Dashboard = () => {
     isLoading
   } = useRealtimeData({
     onNewSale: useCallback(async (sale: Sale, seller?: Seller) => {
+      console.log('🎉 New sale received in Dashboard:', sale.seller_name, sale.amount_tb);
       setCelebrationQueue(prev => [...prev, { sale, seller }]);
     }, []),
     onSellerUpdate: useCallback(async (updatedSellers: Seller[]) => {
-      // Seller data updated - no specific action needed
+      console.log('👤 Sellers updated:', updatedSellers.length);
     }, []),
     enableAutoRefresh: true,
     refreshInterval: 30000
   });
+
+  // Failsafe: Force show dashboard after 5 seconds even if loading
+  useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (!forceShowDashboard) {
+        console.log('⚠️ Loading timeout - forcing dashboard display');
+        setForceShowDashboard(true);
+      }
+    }, 5000);
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Enhanced seller matching when processing celebrations
   const processNextCelebration = useCallback(() => {
@@ -238,12 +257,14 @@ const Dashboard = () => {
     return sellers.find(s => s.id === sale.seller_id);
   };
 
-  if (isLoading) {
+  // Show loading state, but with timeout protection
+  if (isLoading && !forceShowDashboard) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-blue-600">Laddar dashboard...</p>
+          <p className="text-xs text-blue-400 mt-2">Ansluter till databasen...</p>
         </div>
       </div>
     );

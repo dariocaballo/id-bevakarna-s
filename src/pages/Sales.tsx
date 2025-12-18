@@ -75,20 +75,35 @@ const Sales = () => {
     }
   }, [selectedSellerId]);
 
-  // Load today's sales
-  const loadTodaysSales = async () => {
+  // Load today's sales with retry logic
+  const loadTodaysSales = async (retryCount = 0): Promise<void> => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Use Stockholm timezone for correct "today" calculation
+      const now = new Date();
+      const stockholmOffset = 1; // CET, adjust for daylight saving if needed
+      const stockholmDate = new Date(now.getTime() + stockholmOffset * 60 * 60 * 1000);
+      const today = stockholmDate.toISOString().split('T')[0];
+      
       const { data, error } = await supabase
         .from('sales')
         .select('*')
         .gte('timestamp', `${today}T00:00:00.000Z`)
         .order('timestamp', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Retry with exponential backoff for connection issues
+        if (retryCount < 3 && (error.code === 'PGRST002' || error.message?.includes('Failed to fetch'))) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return loadTodaysSales(retryCount + 1);
+        }
+        throw error;
+      }
+      
       setTodaysSales(data || []);
     } catch (error) {
       console.error('Error loading sales:', error);
+      // Keep existing data on error
     }
   };
 
@@ -98,21 +113,57 @@ const Sales = () => {
 
     // Subscribe to realtime changes for both sellers and sales
     const channel = supabase
-      .channel('seller-sales-realtime')
+      .channel('seller-sales-realtime-v2')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
+        { event: 'INSERT', schema: 'public', table: 'sales' },
         () => loadTodaysSales()
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sellers' },
+        { event: 'UPDATE', schema: 'public', table: 'sales' },
+        () => loadTodaysSales()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'sales' },
+        () => loadTodaysSales()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sellers' },
         () => loadSellers()
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sellers' },
+        () => loadSellers()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'sellers' },
+        () => loadSellers()
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Sales page realtime connected');
+        } else if (err) {
+          console.error('Realtime error:', err);
+        }
+      });
+
+    // Handle visibility change
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadSellers();
+        loadTodaysSales();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
