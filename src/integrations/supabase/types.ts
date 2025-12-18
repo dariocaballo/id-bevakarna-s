@@ -112,10 +112,7 @@ export type Database = {
         Args: { seller_id: string; target_user_id: string }
         Returns: boolean
       }
-      get_current_user_role: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      get_current_user_role: { Args: never; Returns: string }
       get_daily_totals: {
         Args: { target_date?: string }
         Returns: {
@@ -130,10 +127,7 @@ export type Database = {
           total_month: number
         }[]
       }
-      is_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
