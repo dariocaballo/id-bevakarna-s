@@ -95,9 +95,17 @@ const Admin = () => {
 
       loadSellers();
       
-      // Set up real-time subscription for sellers
+      // Set up real-time subscription for sellers - listen to all events
       const channel = supabase
-        .channel('admin-sellers-realtime')
+        .channel('admin-sellers-realtime-v2')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'sellers' },
+          () => {
+            console.log('✅ New seller added, reloading...');
+            loadSellers();
+          }
+        )
         .on(
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'sellers' },
@@ -106,10 +114,33 @@ const Admin = () => {
             loadSellers();
           }
         )
-        .subscribe();
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'sellers' },
+          () => {
+            console.log('✅ Seller deleted, reloading...');
+            loadSellers();
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ Admin realtime connected');
+          } else if (err) {
+            console.error('Admin realtime error:', err);
+          }
+        });
+
+      // Handle visibility change for reconnection
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          loadSellers();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
 
       return () => {
         supabase.removeChannel(channel);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
   }, [isAuthenticated]);
