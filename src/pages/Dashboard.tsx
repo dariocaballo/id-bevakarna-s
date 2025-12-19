@@ -23,45 +23,61 @@ interface Seller {
   updated_at?: string;
 }
 
-const Dashboard = () => {
-  const [celebrationQueue, setCelebrationQueue] = useState<{sale: Sale, seller?: Seller}[]>([]);
-  const [currentCelebration, setCurrentCelebration] = useState<{sale: Sale, seller?: Seller} | null>(null);
-  const [celebrationAudioDuration, setCelebrationAudioDuration] = useState<number | undefined>(undefined);
-  const [currentAudio, setCurrentAudio] = useState<{
-    soundUrl: string;
-    sellerName: string;
-    sale: Sale;
-    updatedAt?: string;
-  } | null>(null);
-  const [audioStarted, setAudioStarted] = useState(false);
-  const [forceShowDashboard, setForceShowDashboard] = useState(false);
-  const confettiIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [selectedSeller, setSelectedSeller] = useState<{name: string, amount: number} | null>(null);
+interface CelebrationData {
+  sale: Sale;
+  seller?: Seller;
+  hasAudio: boolean;
+}
 
-  // Use realtime data hook with TV-optimized settings
+const DEFAULT_CELEBRATION_DURATION = 3000;
+
+const Dashboard = () => {
+  // Celebration state
+  const [celebrationQueue, setCelebrationQueue] = useState<CelebrationData[]>([]);
+  const [currentCelebration, setCurrentCelebration] = useState<CelebrationData | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  
+  // UI state
+  const [forceShowDashboard, setForceShowDashboard] = useState(false);
+  const [selectedSeller, setSelectedSeller] = useState<{name: string, amount: number} | null>(null);
+  
+  // Refs for cleanup and preventing stale closures
+  const confettiIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const celebrationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
+
+  // Use realtime data hook
   const {
     totalToday,
     totalMonth,
     topSellers,
     todaysSellers,
     sellers,
-    settings,
     isLoading
   } = useRealtimeData({
-    onNewSale: useCallback(async (sale: Sale, seller?: Seller) => {
-      console.log('🎉 New sale received in Dashboard:', sale.seller_name, sale.amount_tb);
-      setCelebrationQueue(prev => [...prev, { sale, seller }]);
+    onNewSale: useCallback((sale: Sale, seller?: Seller) => {
+      console.log('🎉 New sale received:', sale.seller_name, sale.amount_tb);
+      
+      const celebrationData: CelebrationData = {
+        sale,
+        seller,
+        hasAudio: !!seller?.sound_file_url
+      };
+      
+      setCelebrationQueue(prev => [...prev, celebrationData]);
     }, []),
-    onSellerUpdate: useCallback(async (updatedSellers: Seller[]) => {
+    onSellerUpdate: useCallback((updatedSellers: Seller[]) => {
       console.log('👤 Sellers updated:', updatedSellers.length);
     }, []),
     enableAutoRefresh: true,
     refreshInterval: 30000
   });
 
-  // Failsafe: Force show dashboard after 5 seconds even if loading
+  // Failsafe: Force show dashboard after 5 seconds
   useEffect(() => {
+    isMountedRef.current = true;
+    
     loadingTimeoutRef.current = setTimeout(() => {
       if (!forceShowDashboard) {
         console.log('⚠️ Loading timeout - forcing dashboard display');
@@ -70,65 +86,19 @@ const Dashboard = () => {
     }, 5000);
 
     return () => {
+      isMountedRef.current = false;
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
     };
   }, []);
 
-  // Enhanced seller matching when processing celebrations
-  const processNextCelebration = useCallback(() => {
-    if (celebrationQueue.length > 0 && !currentCelebration) {
-      const next = celebrationQueue[0];
-      setCelebrationQueue(prev => prev.slice(1));
-      
-      // Stop any current audio/confetti immediately
-      if (currentAudio) {
-        setCurrentAudio(null);
-        setCelebrationAudioDuration(undefined);
-      }
-      if (confettiIntervalRef.current) {
-        clearInterval(confettiIntervalRef.current);
-        confettiIntervalRef.current = null;
-      }
-      
-      // Enhanced seller matching using latest sellers data
-      let matchedSeller = next.seller;
-      if (!matchedSeller && next.sale.seller_id && sellers.length > 0) {
-        matchedSeller = sellers.find(s => s.id === next.sale.seller_id);
-      }
-      if (!matchedSeller && next.sale.seller_name && sellers.length > 0) {
-        matchedSeller = sellers.find(s => s.name.toLowerCase() === next.sale.seller_name.toLowerCase());
-      }
-      
-      const enhancedNext = { ...next, seller: matchedSeller };
-      setCurrentCelebration(enhancedNext);
-      setAudioStarted(false);
-      
-      // Setup audio if available with proper cache busting
-      if (matchedSeller?.sound_file_url) {
-        const audioUrl = matchedSeller.sound_file_url;
-        
-        // Set up audio - confetti will start when audio starts playing
-        setCurrentAudio({ 
-          soundUrl: audioUrl,
-          sellerName: matchedSeller.name,
-          sale: enhancedNext.sale,
-          updatedAt: matchedSeller.updated_at
-        });
-        setCelebrationAudioDuration(undefined); // Will be set by AudioManager
-      } else {
-        // No audio - start confetti immediately with default duration
-        startConfetti();
-        setCelebrationAudioDuration(3000);
-      }
-    }
-  }, [celebrationQueue, currentCelebration, currentAudio, sellers]);
-
   // Start confetti animation
   const startConfetti = useCallback(() => {
+    // Clear existing confetti interval
     if (confettiIntervalRef.current) {
       clearInterval(confettiIntervalRef.current);
+      confettiIntervalRef.current = null;
     }
 
     // Initial burst
@@ -139,24 +109,124 @@ const Dashboard = () => {
       colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
     });
 
-    // Continuous light confetti during audio
+    // Continuous confetti
     confettiIntervalRef.current = setInterval(() => {
-      confetti({
-        particleCount: 30,
-        spread: 60,
-        origin: { y: 0.6 },
-        colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
-      });
+      if (isMountedRef.current) {
+        confetti({
+          particleCount: 30,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
+        });
+      }
     }, 800);
   }, []);
 
-  // Process queue when it changes
+  // Stop confetti
+  const stopConfetti = useCallback(() => {
+    if (confettiIntervalRef.current) {
+      clearInterval(confettiIntervalRef.current);
+      confettiIntervalRef.current = null;
+    }
+  }, []);
+
+  // End current celebration and process next
+  const endCelebration = useCallback(() => {
+    console.log('🏁 Ending celebration');
+    
+    // Clear any pending timeout
+    if (celebrationTimeoutRef.current) {
+      clearTimeout(celebrationTimeoutRef.current);
+      celebrationTimeoutRef.current = null;
+    }
+    
+    // Stop confetti
+    stopConfetti();
+    
+    // Clear current celebration
+    setCurrentCelebration(null);
+    setIsPlayingAudio(false);
+    
+    // Process next in queue after short delay for UI cleanup
+    setTimeout(() => {
+      if (isMountedRef.current) {
+        setCelebrationQueue(prev => {
+          if (prev.length > 0) {
+            // Trigger processing of next item
+            return prev;
+          }
+          return prev;
+        });
+      }
+    }, 300);
+  }, [stopConfetti]);
+
+  // Process celebration queue
   useEffect(() => {
-    processNextCelebration();
-  }, [processNextCelebration]);
+    // Only process if no current celebration and queue has items
+    if (currentCelebration || celebrationQueue.length === 0) {
+      return;
+    }
 
+    const next = celebrationQueue[0];
+    console.log('🎊 Starting celebration for:', next.sale.seller_name);
+    
+    // Remove from queue
+    setCelebrationQueue(prev => prev.slice(1));
+    
+    // Enhanced seller matching
+    let matchedSeller = next.seller;
+    if (!matchedSeller && next.sale.seller_id && sellers.length > 0) {
+      matchedSeller = sellers.find(s => s.id === next.sale.seller_id);
+    }
+    if (!matchedSeller && next.sale.seller_name && sellers.length > 0) {
+      matchedSeller = sellers.find(s => s.name.toLowerCase() === next.sale.seller_name.toLowerCase());
+    }
+    
+    const hasAudio = !!matchedSeller?.sound_file_url;
+    
+    // Set current celebration
+    setCurrentCelebration({
+      sale: next.sale,
+      seller: matchedSeller,
+      hasAudio
+    });
+    
+    if (hasAudio) {
+      // Audio will control celebration duration
+      setIsPlayingAudio(true);
+      // Confetti starts when audio starts (via onStarted callback)
+    } else {
+      // No audio - start confetti and set timeout
+      startConfetti();
+      celebrationTimeoutRef.current = setTimeout(() => {
+        endCelebration();
+      }, DEFAULT_CELEBRATION_DURATION);
+    }
+  }, [celebrationQueue, currentCelebration, sellers, startConfetti, endCelebration]);
 
-  // Memoized components for performance
+  // Audio callbacks
+  const handleAudioStarted = useCallback(() => {
+    console.log('🎵 Audio started - starting confetti');
+    startConfetti();
+  }, [startConfetti]);
+
+  const handleAudioEnded = useCallback(() => {
+    console.log('🎵 Audio ended');
+    endCelebration();
+  }, [endCelebration]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopConfetti();
+      if (celebrationTimeoutRef.current) {
+        clearTimeout(celebrationTimeoutRef.current);
+      }
+    };
+  }, [stopConfetti]);
+
+  // Memoized helpers
   const renderSellerImage = useCallback((seller: { name: string; imageUrl?: string }) => {
     if (!seller.imageUrl) {
       return (
@@ -201,63 +271,7 @@ const Dashboard = () => {
     }
   }, []);
 
-
-  const handleAudioStarted = useCallback(() => {
-    if (!audioStarted) {
-      setAudioStarted(true);
-      startConfetti();
-    }
-  }, [audioStarted, startConfetti]);
-
-  const handleAudioDurationChange = useCallback((duration: number) => {
-    setCelebrationAudioDuration(duration * 1000);
-  }, []);
-
-  const handleAudioEnded = useCallback(() => {
-    // Clear current celebration immediately
-    setCurrentAudio(null);
-    setCelebrationAudioDuration(undefined);
-    setCurrentCelebration(null);
-    setAudioStarted(false);
-    
-    // Stop confetti
-    if (confettiIntervalRef.current) {
-      clearInterval(confettiIntervalRef.current);
-      confettiIntervalRef.current = null;
-    }
-    
-    // Process next in queue after a short delay to allow UI cleanup
-    setTimeout(() => {
-      processNextCelebration();
-    }, 300);
-  }, [processNextCelebration]);
-
-  // Auto-clear celebration after timeout (for cases without audio)
-  useEffect(() => {
-    if (currentCelebration && celebrationAudioDuration && !currentAudio) {
-      const timer = setTimeout(() => {
-        handleAudioEnded();
-      }, celebrationAudioDuration);
-
-      return () => clearTimeout(timer);
-    }
-  }, [currentCelebration, celebrationAudioDuration, currentAudio, handleAudioEnded]);
-
-  // Cleanup confetti on unmount
-  useEffect(() => {
-    return () => {
-      if (confettiIntervalRef.current) {
-        clearInterval(confettiIntervalRef.current);
-      }
-    };
-  }, []);
-
-  // Get seller info for celebration
-  const getSeller = (sale: Sale) => {
-    return sellers.find(s => s.id === sale.seller_id);
-  };
-
-  // Show loading state, but with timeout protection
+  // Show loading state
   if (isLoading && !forceShowDashboard) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
@@ -270,6 +284,11 @@ const Dashboard = () => {
     );
   }
 
+  // Get audio URL for current celebration
+  const audioUrl = currentCelebration?.seller?.sound_file_url 
+    ? getVersionedUrl(currentCelebration.seller.sound_file_url, currentCelebration.seller.updated_at) || currentCelebration.seller.sound_file_url
+    : undefined;
+
   return (
     <div className="h-screen overflow-hidden p-3 bg-gradient-to-br from-blue-50 to-blue-100">
       <div className="max-w-7xl mx-auto h-full flex flex-col">
@@ -279,13 +298,13 @@ const Dashboard = () => {
           <h2 className="text-lg font-semibold text-blue-600">Sales Dashboard</h2>
         </div>
 
-        {/* Celebration Overlay with Avatar */}
+        {/* Celebration Overlay */}
         <CelebrationOverlay
           sale={currentCelebration?.sale || null}
           sellerImage={currentCelebration?.seller?.profile_image_url ? 
             getVersionedUrl(currentCelebration.seller.profile_image_url, currentCelebration.seller.updated_at) || currentCelebration.seller.profile_image_url
             : undefined}
-          onComplete={handleAudioEnded}
+          onComplete={endCelebration}
           showBubble={true}
           showConfetti={true}
         />
@@ -372,16 +391,15 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Audio Manager */}
-      {currentAudio && (
+      {/* Audio Manager - only render when celebration has audio */}
+      {currentCelebration?.hasAudio && audioUrl && (
         <AudioManager 
-          soundUrl={currentAudio.soundUrl}
+          key={currentCelebration.sale.id}
+          soundUrl={audioUrl}
           onEnded={handleAudioEnded}
-          onDurationChange={handleAudioDurationChange}
           onStarted={handleAudioStarted}
           autoPlay={true}
-          sellerName={currentAudio.sellerName}
-          key={`${currentAudio.sale.id}-${currentAudio.updatedAt || Date.now()}`}
+          sellerName={currentCelebration.seller?.name}
         />
       )}
 
