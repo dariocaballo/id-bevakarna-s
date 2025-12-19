@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface Sale {
   id: string;
@@ -12,7 +12,6 @@ interface CelebrationOverlayProps {
   sale: Sale | null;
   sellerImage?: string;
   onComplete: () => void;
-  audioDuration?: number;
   showBubble?: boolean;
   showConfetti?: boolean;
 }
@@ -21,52 +20,25 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
   sale,
   sellerImage,
   onComplete,
-  audioDuration,
   showBubble = true,
   showConfetti = true
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (sale) {
       setIsVisible(true);
       setIsAnimating(true);
-
-      // Clear any existing timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
-
-      // Set completion timeout based on audio duration or default
-      const duration = audioDuration || 3000;
-      timeoutRef.current = setTimeout(() => {
-        handleComplete();
-      }, duration);
+    } else {
+      // Fade out animation when sale is cleared
+      setIsAnimating(false);
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+      }, 300);
+      return () => clearTimeout(timer);
     }
-
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
-    };
-  }, [sale, audioDuration]);
-
-  const handleComplete = () => {
-    setIsAnimating(false);
-    animationTimeoutRef.current = setTimeout(() => {
-      setIsVisible(false);
-      onComplete();
-    }, 300); // Allow fade out animation
-  };
+  }, [sale]);
 
   if (!isVisible || !sale) return null;
 
@@ -116,7 +88,6 @@ export const CelebrationOverlay: React.FC<CelebrationOverlayProps> = ({
                     alt={sale.seller_name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback to initials if image fails
                       const target = e.currentTarget;
                       target.style.display = 'none';
                       const fallback = target.nextElementSibling as HTMLElement;

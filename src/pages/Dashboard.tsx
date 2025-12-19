@@ -286,7 +286,6 @@ const Dashboard = () => {
             getVersionedUrl(currentCelebration.seller.profile_image_url, currentCelebration.seller.updated_at) || currentCelebration.seller.profile_image_url
             : undefined}
           onComplete={handleAudioEnded}
-          audioDuration={celebrationAudioDuration}
           showBubble={true}
           showConfetti={true}
         />
