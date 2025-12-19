@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2 } from 'lucide-react';
 
 interface AudioManagerProps {
   soundUrl?: string;
@@ -19,229 +19,153 @@ export const AudioManager = ({
   autoPlay = false,
   sellerName 
 }: AudioManagerProps) => {
-  const [showActivationButton, setShowActivationButton] = useState(false);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(() => {
-    // Check if user has previously enabled sound
-    return localStorage.getItem('dashboard-sound-enabled') === 'true';
-  });
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const playAttemptedRef = useRef(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Initialize AudioContext on first user interaction
-  const initializeAudioContext = useCallback(async () => {
-    if (!audioContextRef.current) {
-      try {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      } catch (error) {
-        console.log('AudioContext initialization failed');
-      }
-    }
-    
-    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-      try {
-        await audioContextRef.current.resume();
-      } catch (error) {
-        console.log('AudioContext resume failed');
-      }
-    }
-  }, []);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hasStartedRef = useRef(false);
+  const hasEndedRef = useRef(false);
+  const activationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showActivation, setShowActivation] = React.useState(false);
 
   // Cleanup function
   const cleanup = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+    if (activationTimeoutRef.current) {
+      clearTimeout(activationTimeoutRef.current);
+      activationTimeoutRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
     }
   }, []);
 
+  // Handle audio end - call onEnded only once
+  const handleEnded = useCallback(() => {
+    if (hasEndedRef.current) return;
+    hasEndedRef.current = true;
+    console.log('🔇 Audio ended, calling onEnded');
+    setShowActivation(false);
+    onEnded?.();
+  }, [onEnded]);
+
+  // Main audio setup effect
   useEffect(() => {
-    if (!soundUrl || !audioRef.current) return;
+    if (!soundUrl) {
+      console.log('⚠️ No sound URL provided');
+      return;
+    }
 
-    const audio = audioRef.current;
-    let isCurrentEffect = true;
-    playAttemptedRef.current = false;
+    console.log(`🔊 AudioManager: Setting up audio for ${sellerName}`, soundUrl);
     
-    console.log(`🔊 AudioManager: Setting up audio for ${sellerName}`);
-    
-    const handleLoadedMetadata = () => {
-      if (!isCurrentEffect) return;
-      
-      console.log(`🎵 Audio metadata loaded, duration: ${audio.duration}s`);
-      
-      // Always reset to start and report duration
-      audio.currentTime = 0;
-      const duration = audio.duration;
-      if (duration && isFinite(duration)) {
-        onDurationChange?.(duration);
+    hasStartedRef.current = false;
+    hasEndedRef.current = false;
+    setShowActivation(false);
+
+    // Create audio element
+    const audio = new Audio();
+    audioRef.current = audio;
+    audio.preload = 'auto';
+    audio.volume = 1.0;
+
+    // Event handlers
+    const onLoadedMetadata = () => {
+      console.log(`🎵 Audio loaded, duration: ${audio.duration}s`);
+      if (audio.duration && isFinite(audio.duration)) {
+        onDurationChange?.(audio.duration);
       }
-      
-      // Auto-play after metadata is loaded
-      if (autoPlay && !playAttemptedRef.current) {
-        playAttemptedRef.current = true;
+    };
+
+    const onCanPlayThrough = () => {
+      console.log('✅ Audio can play through');
+      if (autoPlay && !hasStartedRef.current) {
         attemptPlay();
       }
     };
 
-    const handleCanPlayThrough = () => {
-      if (!isCurrentEffect) return;
-      
-      // Ensure we're at the beginning and try to play
-      audio.currentTime = 0;
-      if (autoPlay && soundEnabled && !playAttemptedRef.current) {
-        playAttemptedRef.current = true;
-        attemptPlay();
+    const onPlay = () => {
+      if (!hasStartedRef.current) {
+        hasStartedRef.current = true;
+        console.log('▶️ Audio started playing');
+        setShowActivation(false);
+        onStarted?.();
       }
     };
 
-    const handleEnded = () => {
-      if (!isCurrentEffect) return;
-      console.log('🔇 Audio ended');
-      setShowActivationButton(false);
-      setAudioError(null);
-      cleanup();
-      onEnded?.();
+    const onAudioEnded = () => {
+      console.log('🔇 Audio ended event');
+      handleEnded();
     };
 
-    const handleError = (e: Event) => {
-      if (!isCurrentEffect) return;
-      console.error('🔇 Audio error:', e);
-      setAudioError('Ljudfilen kunde inte laddas');
-      cleanup();
-      // Delay slightly before calling onEnded to allow UI updates
-      setTimeout(() => onEnded?.(), 100);
-    };
-
-    const handlePlay = () => {
-      if (!isCurrentEffect) return;
-      console.log('▶️ Audio playing');
-      setShowActivationButton(false);
-      setAudioError(null);
-      onStarted?.();
-    };
-
-    const handlePause = () => {
-      if (!isCurrentEffect) return;
-      // Audio paused - no action needed
+    const onError = (e: Event) => {
+      console.error('❌ Audio error:', e);
+      handleEnded();
     };
 
     const attemptPlay = async () => {
-      if (!audio || !isCurrentEffect) return;
+      if (hasStartedRef.current || hasEndedRef.current) return;
       
       try {
         console.log('🎵 Attempting to play audio...');
-        
-        // Ensure we start from the beginning
-        audio.currentTime = 0;
-        
-        // Initialize AudioContext if needed
-        await initializeAudioContext();
-        
-        // Small delay to ensure audio is ready
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          await playPromise;
-          if (isCurrentEffect) {
-            console.log('✅ Audio playing successfully');
-            setShowActivationButton(false);
-            setAudioError(null);
-            setSoundEnabled(true);
-            localStorage.setItem('dashboard-sound-enabled', 'true');
-          }
-        }
+        await audio.play();
+        console.log('✅ Audio playing successfully');
       } catch (error: any) {
-        if (!isCurrentEffect) return;
-        
         console.log('⚠️ Audio play failed:', error.name);
         
         if (error.name === 'NotAllowedError' || error.name === 'AbortError') {
-          setShowActivationButton(true);
-          setAudioError('Klicka för att aktivera ljud');
+          // Browser requires user interaction
+          setShowActivation(true);
           
-          // Set a timeout - if user doesn't click within 10 seconds, skip audio
-          timeoutRef.current = setTimeout(() => {
-            if (isCurrentEffect) {
-              console.log('⏱️ Audio activation timeout - skipping');
-              setShowActivationButton(false);
-              onEnded?.();
-            }
-          }, 10000);
+          // Timeout - skip audio after 8 seconds if not activated
+          activationTimeoutRef.current = setTimeout(() => {
+            console.log('⏱️ Audio activation timeout');
+            handleEnded();
+          }, 8000);
         } else {
-          setAudioError('Ljudfel - fortsätter utan ljud');
-          setTimeout(() => onEnded?.(), 100);
+          // Other error - skip audio
+          handleEnded();
         }
       }
     };
 
-    // Reset audio state and configure properly
-    audio.pause();
-    audio.currentTime = 0;
-    audio.volume = 1.0;
-    audio.muted = false;
-    audio.preload = 'auto';
-    audio.crossOrigin = 'anonymous';
-    
-    // Set up event listeners
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplaythrough', handleCanPlayThrough);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
+    // Add event listeners
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('canplaythrough', onCanPlayThrough);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('ended', onAudioEnded);
+    audio.addEventListener('error', onError);
 
-    // Load audio - create versioned URL for cache busting
-    const versionedUrl = soundUrl.includes('?v=') ? soundUrl : `${soundUrl}?v=${Date.now()}`;
+    // Load audio with cache busting
+    const versionedUrl = soundUrl.includes('?') ? soundUrl : `${soundUrl}?v=${Date.now()}`;
     audio.src = versionedUrl;
     audio.load();
 
+    // Cleanup on unmount or soundUrl change
     return () => {
-      isCurrentEffect = false;
+      console.log('🧹 AudioManager cleanup');
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('canplaythrough', onCanPlayThrough);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('ended', onAudioEnded);
+      audio.removeEventListener('error', onError);
       cleanup();
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('canplaythrough', handleCanPlayThrough);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
-      audio.pause();
-      audio.currentTime = 0;
     };
-  }, [soundUrl, onEnded, onDurationChange, onStarted, autoPlay, sellerName, soundEnabled, initializeAudioContext, cleanup]);
+  }, [soundUrl, autoPlay, sellerName, onDurationChange, onStarted, handleEnded, cleanup]);
 
-  const handleUserActivation = async () => {
-    if (!audioRef.current) return;
+  // Handle user activation click
+  const handleActivationClick = async () => {
+    if (!audioRef.current || hasEndedRef.current) return;
     
-    const audio = audioRef.current;
-    cleanup();
+    if (activationTimeoutRef.current) {
+      clearTimeout(activationTimeoutRef.current);
+      activationTimeoutRef.current = null;
+    }
     
     try {
       console.log('👆 User activated audio');
-      
-      // Initialize AudioContext
-      await initializeAudioContext();
-      
-      // Enable sound globally
-      setSoundEnabled(true);
-      localStorage.setItem('dashboard-sound-enabled', 'true');
-      
-      // Ensure we start from the beginning
-      audio.currentTime = 0;
-      
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        await playPromise;
-      }
-      
-      setShowActivationButton(false);
-      setAudioError(null);
+      await audioRef.current.play();
+      setShowActivation(false);
     } catch (error) {
       console.error('❌ User activation failed:', error);
-      setAudioError('Kan inte spela ljud');
-      setTimeout(() => onEnded?.(), 100);
+      handleEnded();
     }
   };
 
@@ -249,42 +173,24 @@ export const AudioManager = ({
 
   return (
     <>
-      <audio 
-        ref={audioRef}
-        preload="auto"
-        style={{ display: 'none' }}
-      />
-      
-      {/* User activation button - show prominently */}
-      {showActivationButton && (
+      {showActivation && (
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center">
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md mx-4 text-center border-4 border-blue-500 animate-pulse">
             <div className="mb-6">
               <Volume2 className="w-16 h-16 text-blue-500 mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-gray-800 mb-2">Aktivera ljud</h2>
-              <p className="text-gray-600">För att spela upp ljud när en försäljning rapporteras</p>
-              <p className="text-sm text-blue-600 mt-2">Krävs för att fira säljframgångar! 🎉</p>
+              <p className="text-gray-600">Klicka för att spela upp firande-ljud</p>
               {sellerName && (
-                <p className="text-xs text-gray-500 mt-2">Försäljning av: {sellerName}</p>
+                <p className="text-sm text-blue-600 mt-2">🎉 {sellerName} har gjort en sälj!</p>
               )}
             </div>
             <Button
-              onClick={handleUserActivation}
+              onClick={handleActivationClick}
               size="lg"
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg font-semibold"
             >
-              ▶️ Aktivera ljud
+              ▶️ Spela ljud
             </Button>
-          </div>
-        </div>
-      )}
-      
-      {/* Error display - only show critical errors */}
-      {audioError && !showActivationButton && (
-        <div className="fixed bottom-4 right-4 z-[10000] bg-red-100 border-l-4 border-red-500 text-red-700 p-3 rounded shadow-lg">
-          <div className="flex items-center gap-2">
-            <VolumeX className="w-4 h-4" />
-            <span className="text-sm font-medium">{audioError}</span>
           </div>
         </div>
       )}
