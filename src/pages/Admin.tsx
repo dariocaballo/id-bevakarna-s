@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Upload, Volume2, Play, Trash2, Save, FileImage, FileAudio } from 'lucide-react';
+import { Users, Upload, Volume2, Play, Trash2, Save, FileImage, FileAudio, Plus } from 'lucide-react';
 import { validateImageFile, validateAudioFile, uploadToBucket, updateSellerMedia, getVersionedUrl, createAudio } from '@/utils/media';
 
 interface Seller {
@@ -37,6 +37,9 @@ const Admin = () => {
   const [pendingChanges, setPendingChanges] = useState<PendingChanges>({});
   const [savingProgress, setSavingProgress] = useState<SavingProgress>({});
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const [newSellerName, setNewSellerName] = useState('');
+  const [isAddingSeller, setIsAddingSeller] = useState(false);
+  const [deletingSeller, setDeletingSeller] = useState<string | null>(null);
 
   const handleLogin = () => {
     if (password === 'admin123') {
@@ -438,6 +441,97 @@ const Admin = () => {
     }
   };
 
+  // Add new seller
+  const handleAddSeller = async () => {
+    const trimmedName = newSellerName.trim();
+    if (!trimmedName) {
+      toast({ title: "Fel", description: "Ange ett namn för säljaren", variant: "destructive" });
+      return;
+    }
+
+    // Check if name already exists
+    const existingSeller = sellers.find(s => s.name.toLowerCase() === trimmedName.toLowerCase());
+    if (existingSeller) {
+      toast({ title: "Fel", description: "En säljare med det namnet finns redan", variant: "destructive" });
+      return;
+    }
+
+    setIsAddingSeller(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from('sellers')
+        .insert({ name: trimmedName })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({ title: "Säljare tillagd!", description: `${trimmedName} har lagts till` });
+      setNewSellerName('');
+      
+      // Update local state immediately
+      if (data) {
+        setSellers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Kunde inte lägga till säljare';
+      toast({ title: "Fel", description: errorMsg, variant: "destructive" });
+    } finally {
+      setIsAddingSeller(false);
+    }
+  };
+
+  // Delete seller and all associated files
+  const handleDeleteSeller = async (sellerId: string) => {
+    const seller = sellers.find(s => s.id === sellerId);
+    if (!seller) return;
+
+    if (!confirm(`Är du säker på att du vill ta bort ${seller.name}? Detta tar även bort profilbild och ljudfil.`)) {
+      return;
+    }
+
+    setDeletingSeller(sellerId);
+    
+    try {
+      // Delete files from storage first
+      if (seller.profile_image_url || seller.sound_file_url) {
+        // List and remove all files for this seller from both buckets
+        const profileFiles = await supabase.storage.from('seller-profiles').list('');
+        const soundFiles = await supabase.storage.from('seller-sounds').list('');
+        
+        const profileToDelete = profileFiles.data?.filter(f => f.name.startsWith(sellerId)).map(f => f.name) || [];
+        const soundToDelete = soundFiles.data?.filter(f => f.name.startsWith(sellerId)).map(f => f.name) || [];
+        
+        if (profileToDelete.length > 0) {
+          await supabase.storage.from('seller-profiles').remove(profileToDelete);
+        }
+        if (soundToDelete.length > 0) {
+          await supabase.storage.from('seller-sounds').remove(soundToDelete);
+        }
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from('sellers')
+        .delete()
+        .eq('id', sellerId);
+
+      if (error) throw error;
+
+      toast({ title: "Säljare borttagen", description: `${seller.name} har tagits bort` });
+      
+      // Update local state immediately
+      setSellers(prev => prev.filter(s => s.id !== sellerId));
+      clearPendingChanges(sellerId);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Kunde inte ta bort säljare';
+      toast({ title: "Fel", description: errorMsg, variant: "destructive" });
+    } finally {
+      setDeletingSeller(null);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
@@ -485,6 +579,38 @@ const Admin = () => {
           <p className="text-blue-600">Hantera profilbilder och ljudfiler</p>
         </div>
 
+        <Card className="shadow-lg mb-4">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Lägg till ny säljare
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Säljarens namn"
+                value={newSellerName}
+                onChange={(e) => setNewSellerName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAddSeller()}
+                disabled={isAddingSeller}
+                className="flex-1"
+              />
+              <Button 
+                onClick={handleAddSeller} 
+                disabled={isAddingSeller || !newSellerName.trim()}
+              >
+                {isAddingSeller ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                ) : (
+                  <Plus className="w-4 h-4 mr-1" />
+                )}
+                Lägg till
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -501,6 +627,7 @@ const Admin = () => {
                   <TableHead>Ljudfil</TableHead>
                   <TableHead>Åtgärder</TableHead>
                   <TableHead>Spara</TableHead>
+                  <TableHead>Ta bort</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -666,6 +793,23 @@ const Admin = () => {
                             <Save className="w-3 h-3 mr-1" />
                           )}
                           {isSaving ? 'Sparar...' : 'Spara'}
+                        </Button>
+                      </TableCell>
+
+                      {/* Delete Seller Column */}
+                      <TableCell>
+                        <Button
+                          onClick={() => handleDeleteSeller(seller.id)}
+                          disabled={isSaving || deletingSeller === seller.id}
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          {deletingSeller === seller.id ? (
+                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </Button>
                       </TableCell>
                     </TableRow>
