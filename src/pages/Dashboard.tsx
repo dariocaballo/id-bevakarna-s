@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Volume2 } from 'lucide-react';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 import { AudioManager } from '@/components/AudioManager';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
@@ -32,16 +34,18 @@ interface CelebrationData {
 const DEFAULT_CELEBRATION_DURATION = 3000;
 
 const Dashboard = () => {
+  // Audio unlock state — one-time per page load
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+
   // Celebration state
   const [celebrationQueue, setCelebrationQueue] = useState<CelebrationData[]>([]);
   const [currentCelebration, setCurrentCelebration] = useState<CelebrationData | null>(null);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   
   // UI state
   const [forceShowDashboard, setForceShowDashboard] = useState(false);
   const [selectedSeller, setSelectedSeller] = useState<{name: string, amount: number} | null>(null);
   
-  // Refs for cleanup and preventing stale closures
+  // Refs for cleanup
   const confettiIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const celebrationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -93,15 +97,42 @@ const Dashboard = () => {
     };
   }, []);
 
+  // Audio unlock handler
+  const handleUnlockAudio = useCallback(() => {
+    // Play a silent sound to unlock audio context
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      ctx.resume();
+      console.log('🔓 Audio context unlocked');
+    } catch (e) {
+      console.log('⚠️ AudioContext unlock failed, falling back to Audio element');
+    }
+
+    // Also play a silent Audio element to unlock HTMLAudioElement playback
+    try {
+      const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+      silentAudio.volume = 0;
+      silentAudio.play().then(() => {
+        silentAudio.pause();
+        console.log('🔓 HTML Audio unlocked');
+      }).catch(() => {});
+    } catch (e) {}
+
+    setAudioUnlocked(true);
+  }, []);
+
   // Start confetti animation
   const startConfetti = useCallback(() => {
-    // Clear existing confetti interval
     if (confettiIntervalRef.current) {
       clearInterval(confettiIntervalRef.current);
       confettiIntervalRef.current = null;
     }
 
-    // Initial burst
     confetti({
       particleCount: 120,
       spread: 80,
@@ -109,7 +140,6 @@ const Dashboard = () => {
       colors: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444']
     });
 
-    // Continuous confetti
     confettiIntervalRef.current = setInterval(() => {
       if (isMountedRef.current) {
         confetti({
@@ -130,40 +160,21 @@ const Dashboard = () => {
     }
   }, []);
 
-  // End current celebration and process next
+  // End current celebration and allow next in queue
   const endCelebration = useCallback(() => {
     console.log('🏁 Ending celebration');
     
-    // Clear any pending timeout
     if (celebrationTimeoutRef.current) {
       clearTimeout(celebrationTimeoutRef.current);
       celebrationTimeoutRef.current = null;
     }
     
-    // Stop confetti
     stopConfetti();
-    
-    // Clear current celebration
     setCurrentCelebration(null);
-    setIsPlayingAudio(false);
-    
-    // Process next in queue after short delay for UI cleanup
-    setTimeout(() => {
-      if (isMountedRef.current) {
-        setCelebrationQueue(prev => {
-          if (prev.length > 0) {
-            // Trigger processing of next item
-            return prev;
-          }
-          return prev;
-        });
-      }
-    }, 300);
   }, [stopConfetti]);
 
   // Process celebration queue
   useEffect(() => {
-    // Only process if no current celebration and queue has items
     if (currentCelebration || celebrationQueue.length === 0) {
       return;
     }
@@ -171,7 +182,6 @@ const Dashboard = () => {
     const next = celebrationQueue[0];
     console.log('🎊 Starting celebration for:', next.sale.seller_name);
     
-    // Remove from queue
     setCelebrationQueue(prev => prev.slice(1));
     
     // Enhanced seller matching
@@ -183,36 +193,29 @@ const Dashboard = () => {
       matchedSeller = sellers.find(s => s.name.toLowerCase() === next.sale.seller_name.toLowerCase());
     }
     
-    const hasAudio = !!matchedSeller?.sound_file_url;
+    const hasAudio = !!matchedSeller?.sound_file_url && audioUnlocked;
     
-    // Set current celebration
     setCurrentCelebration({
       sale: next.sale,
       seller: matchedSeller,
       hasAudio
     });
     
-    if (hasAudio) {
-      // Audio will control celebration duration
-      setIsPlayingAudio(true);
-      // Confetti starts when audio starts (via onStarted callback)
-    } else {
-      // No audio - start confetti and set timeout
-      startConfetti();
+    // Start confetti immediately
+    startConfetti();
+    
+    if (!hasAudio) {
+      // No audio - use default timeout
       celebrationTimeoutRef.current = setTimeout(() => {
         endCelebration();
       }, DEFAULT_CELEBRATION_DURATION);
     }
-  }, [celebrationQueue, currentCelebration, sellers, startConfetti, endCelebration]);
+    // If hasAudio, AudioManager's onEnded will call endCelebration
+  }, [celebrationQueue, currentCelebration, sellers, startConfetti, endCelebration, audioUnlocked]);
 
-  // Audio callbacks
-  const handleAudioStarted = useCallback(() => {
-    console.log('🎵 Audio started - starting confetti');
-    startConfetti();
-  }, [startConfetti]);
-
+  // Audio callback - when audio ends, end celebration
   const handleAudioEnded = useCallback(() => {
-    console.log('🎵 Audio ended');
+    console.log('🎵 Audio ended - ending celebration');
     endCelebration();
   }, [endCelebration]);
 
@@ -270,6 +273,29 @@ const Dashboard = () => {
       default: return '';
     }
   }, []);
+
+  // Audio unlock overlay — shown only once per page load
+  if (!audioUnlocked) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
+        <div className="text-center">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white shadow-lg flex items-center justify-center">
+            <Volume2 className="w-12 h-12 text-blue-600" />
+          </div>
+          <h1 className="text-3xl font-bold text-blue-800 mb-2">ID-Bevakarna</h1>
+          <h2 className="text-lg text-blue-600 mb-6">Sales Dashboard</h2>
+          <p className="text-sm text-blue-500 mb-8">Klicka för att starta dashboarden med ljud</p>
+          <Button
+            onClick={handleUnlockAudio}
+            size="lg"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8 py-3 text-lg font-semibold"
+          >
+            ▶️ Starta Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading state
   if (isLoading && !forceShowDashboard) {
@@ -339,7 +365,6 @@ const Dashboard = () => {
               <div className="flex justify-center gap-6 flex-wrap">
                 {todaysSellers.slice(0, 6).map((seller, index) => (
                   <div key={seller.name} className="flex flex-col items-center space-y-1">
-                    {/* Large circle with profile image */}
                     <div className="relative">
                       <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden border-2 border-blue-300 shadow-lg">
                         {renderSellerImage(seller)}
@@ -347,12 +372,10 @@ const Dashboard = () => {
                           {seller.name.charAt(0).toUpperCase()}
                         </span>
                       </div>
-                      {/* Medal */}
                       <div className="absolute -top-1 -right-1 text-lg">
                         {getMedalIcon(index)}
                       </div>
                     </div>
-                    {/* Name + Today's TB */}
                     <div className="text-center">
                       <p className="font-bold text-slate-800 text-xs leading-tight">{seller.name}</p>
                       <p className="text-sm font-bold text-blue-700 leading-tight">{formatCurrency(seller.amount)}</p>
@@ -363,7 +386,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Monthly top sellers - full width now */}
+          {/* Monthly top sellers */}
           <Card className="shadow-md border-0 bg-white overflow-hidden flex-1 min-h-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-base text-slate-700 font-bold flex items-center gap-2">
@@ -397,7 +420,7 @@ const Dashboard = () => {
           key={currentCelebration.sale.id}
           soundUrl={audioUrl}
           onEnded={handleAudioEnded}
-          onStarted={handleAudioStarted}
+          onStarted={() => console.log('🎵 Audio started for', currentCelebration.sale.seller_name)}
           autoPlay={true}
           sellerName={currentCelebration.seller?.name}
         />
