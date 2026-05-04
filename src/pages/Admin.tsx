@@ -454,20 +454,14 @@ const Admin = () => {
     setIsAddingSeller(true);
     
     try {
-      const { data, error } = await supabase
-        .from('sellers')
-        .insert({ name: trimmedName })
-        .select()
-        .single();
-
-      if (error) throw error;
+      const result = await dataApi<{ seller: Seller }>('add_seller', { name: trimmedName });
 
       toast({ title: "Säljare tillagd!", description: `${trimmedName} har lagts till` });
       setNewSellerName('');
       
       // Update local state immediately
-      if (data) {
-        setSellers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      if (result.seller) {
+        setSellers(prev => [...prev, result.seller].sort((a, b) => a.name.localeCompare(b.name)));
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Kunde inte lägga till säljare';
@@ -506,13 +500,7 @@ const Admin = () => {
         }
       }
 
-      // Delete from database
-      const { error } = await supabase
-        .from('sellers')
-        .delete()
-        .eq('id', sellerId);
-
-      if (error) throw error;
+      await dataApi('delete_seller', { sellerId });
 
       toast({ title: "Säljare borttagen", description: `${seller.name} har tagits bort` });
       
