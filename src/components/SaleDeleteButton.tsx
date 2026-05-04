@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Trash2, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { dataApi } from '@/utils/dataApi';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,19 +35,7 @@ export const SaleDeleteButton: React.FC<SaleDeleteButtonProps> = ({
     setIsDeleting(true);
     
     try {
-      const { error } = await supabase
-        .from('sales')
-        .delete()
-        .eq('id', saleId);
-
-      if (error) {
-        toast({
-          title: "Fel",
-          description: `Kunde inte ta bort försäljningen: ${error.message}`,
-          variant: "destructive"
-        });
-        return;
-      }
+      await dataApi('delete_sale', { saleId });
       
       toast({
         title: "Försäljning borttagen",
