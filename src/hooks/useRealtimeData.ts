@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getVersionedUrl } from '@/utils/media';
+import { dataApi } from '@/utils/dataApi';
 
 interface Sale {
   id: string;
@@ -62,26 +63,8 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
   // Robust seller loading with retry and exponential backoff
   const loadSellers = useCallback(async (retryCount = 0): Promise<Seller[]> => {
     try {
-      const { data, error } = await supabase.from('sellers').select('*').order('name');
-      
-      if (error) {
-        // Retry with exponential backoff for connection/schema issues
-        const isRetryableError = 
-          error.code === 'PGRST002' || 
-          error.message?.includes('schema cache') ||
-          error.message?.includes('Failed to fetch') ||
-          error.message?.includes('network');
-        
-        if (retryCount < 5 && isRetryableError) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 16000);
-          console.log(`🔄 Retrying loadSellers (attempt ${retryCount + 1}) in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return loadSellers(retryCount + 1);
-        }
-        throw error;
-      }
-      
-      const sellersData = data || [];
+      const result = await dataApi<{ sellers: Seller[] }>('list_sellers');
+      const sellersData = result.sellers || [];
       sellersCache.current = sellersData;
       
       if (isMountedRef.current) {
@@ -92,6 +75,11 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
       return sellersData;
     } catch (error) {
       console.error('Error loading sellers:', error);
+      if (retryCount < 5) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 16000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return loadSellers(retryCount + 1);
+      }
       // Return cached data if available, otherwise empty array
       const fallback = sellersCache.current.length > 0 ? sellersCache.current : [];
       
@@ -118,97 +106,28 @@ export const useRealtimeData = (options: UseRealtimeDataOptions = {}): UseRealti
     lastDataLoadRef.current = now;
 
     try {
-      const currentSellers = sellersData || sellersCache.current;
-      
-      // Use server-side aggregation for better performance
-      const [dailyResult, monthlyResult] = await Promise.all([
-        supabase.rpc('get_daily_totals'),
-        supabase.rpc('get_monthly_totals')
-      ]);
-
-      // Check for retryable errors
-      const checkRetryableError = (error: any) => {
-        if (!error) return false;
-        return error.code === 'PGRST002' || 
-               error.message?.includes('schema cache') ||
-               error.message?.includes('Failed to fetch') ||
-               error.message?.includes('network');
-      };
-
-      if (dailyResult.error && checkRetryableError(dailyResult.error) && retryCount < 5) {
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 16000);
-        console.log(`🔄 Retrying loadSalesData (attempt ${retryCount + 1}) in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return loadSalesData(sellersData, retryCount + 1);
-      }
-
-      if (monthlyResult.error && checkRetryableError(monthlyResult.error) && retryCount < 5) {
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 16000);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return loadSalesData(sellersData, retryCount + 1);
-      }
-
-      // Log errors but don't throw - use fallback data
-      if (dailyResult.error) {
-        console.error('Error loading daily totals:', dailyResult.error);
-      }
-      if (monthlyResult.error) {
-        console.error('Error loading monthly totals:', monthlyResult.error);
-      }
-
-      const dailyData = dailyResult.data?.[0];
-      const monthlyData = monthlyResult.data?.[0];
-      
-      // Process today's sellers
-      const todaysSellersArray = Array.isArray(dailyData?.seller_totals) 
-        ? (dailyData.seller_totals as any[])
-          .map((sellerData: any) => {
-            const seller = currentSellers.find(s => 
-              s.id === sellerData.seller_id || 
-              s.name.toLowerCase() === sellerData.seller_name.toLowerCase()
-            );
-            return {
-              name: sellerData.seller_name,
-              amount: Number(sellerData.amount),
-              imageUrl: seller?.profile_image_url ? 
-                getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url 
-                : undefined
-            };
-          })
-          .sort((a: any, b: any) => b.amount - a.amount)
-        : [];
-
-      // Process monthly top sellers
-      const topSellersArray = Array.isArray(monthlyData?.seller_totals)
-        ? (monthlyData.seller_totals as any[])
-          .map((sellerData: any) => {
-            const seller = currentSellers.find(s => 
-              s.id === sellerData.seller_id || 
-              s.name.toLowerCase() === sellerData.seller_name.toLowerCase()
-            );
-            return {
-              name: sellerData.seller_name,
-              amount: Number(sellerData.amount),
-              imageUrl: seller?.profile_image_url ? 
-                getVersionedUrl(seller.profile_image_url, seller.updated_at) || seller.profile_image_url 
-                : undefined
-            };
-          })
-          .sort((a: any, b: any) => b.amount - a.amount)
-          .slice(0, 10)
-        : [];
+      const result = await dataApi<any>('dashboard_data');
+      const currentSellers = sellersData || result.sellers || sellersCache.current;
+      sellersCache.current = currentSellers;
+      const versionImage = (seller: any) => ({
+        ...seller,
+        imageUrl: seller.imageUrl ? getVersionedUrl(seller.imageUrl, currentSellers.find((s: Seller) => s.id === seller.seller_id || s.name.toLowerCase() === seller.name.toLowerCase())?.updated_at) || seller.imageUrl : undefined
+      });
+      const todaysSellersArray = (result.todaysSellers || []).map(versionImage);
+      const topSellersArray = (result.topSellers || []).map(versionImage);
 
       // Update state only if component is still mounted
       if (isMountedRef.current) {
-        setTotalToday(Number(dailyData?.total_today) || 0);
-        setTotalMonth(Number(monthlyData?.total_month) || 0);
+        setSellers(currentSellers);
+        setTotalToday(Number(result.totalToday) || 0);
+        setTotalMonth(Number(result.totalMonth) || 0);
         setTopSellers(topSellersArray);
         setTodaysSellers(todaysSellersArray);
       }
       
       console.log('✅ Sales data loaded:', { 
-        totalToday: dailyData?.total_today, 
-        totalMonth: monthlyData?.total_month,
+        totalToday: result.totalToday, 
+        totalMonth: result.totalMonth,
         todaysSellersCount: todaysSellersArray.length,
         topSellersCount: topSellersArray.length
       });

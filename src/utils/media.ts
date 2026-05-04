@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { dataApi } from '@/utils/dataApi';
 
 export interface MediaUploadResult {
   publicUrl: string;
@@ -87,43 +88,8 @@ export async function updateSellerMedia(
   updates: { profile_image_url?: string | null; sound_file_url?: string | null }
 ): Promise<{ error?: string; data?: any }> {
   try {
-    const updateTime = new Date().toISOString();
-    
-    // First verify seller exists
-    const { data: existingSeller, error: checkError } = await supabase
-      .from('sellers')
-      .select('id, name')
-      .eq('id', sellerId)
-      .maybeSingle();
-    
-    if (checkError) {
-      throw new Error(`Kunde inte kontrollera säljare: ${checkError.message}`);
-    }
-    
-    if (!existingSeller) {
-      throw new Error(`Säljare med ID ${sellerId} hittades inte`);
-    }
-    
-    // Use UPSERT with proper conflict resolution to ensure atomicity
-    const { data, error } = await supabase
-      .from('sellers')
-      .upsert({ 
-        id: sellerId,
-        name: existingSeller.name, // Preserve existing name
-        ...updates,
-        updated_at: updateTime
-      }, {
-        onConflict: 'id',
-        ignoreDuplicates: false
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Databasfel: ${error.message}`);
-    }
-    
-    return { data };
+    const result = await dataApi<{ seller: any }>('update_seller_media', { sellerId, ...updates });
+    return { data: result.seller };
   } catch (error) {
     return { 
       error: error instanceof Error ? error.message : 'Database update failed' 

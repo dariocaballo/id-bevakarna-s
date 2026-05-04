@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Upload, Volume2, Play, Trash2, Save, FileImage, FileAudio, Plus } from 'lucide-react';
 import { validateImageFile, validateAudioFile, uploadToBucket, updateSellerMedia, getVersionedUrl, createAudio } from '@/utils/media';
+import { dataApi } from '@/utils/dataApi';
 
 interface Seller {
   id: string;
@@ -59,21 +60,15 @@ const Admin = () => {
 
   const loadSellers = async (retryCount = 0): Promise<void> => {
     try {
-      const { data, error } = await supabase.from('sellers').select('*').order('name');
-      
-      if (error) {
-        // Retry with exponential backoff for connection issues
-        if (retryCount < 3 && (error.code === 'PGRST002' || error.message?.includes('schema cache'))) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return loadSellers(retryCount + 1);
-        }
-        throw error;
-      }
-      
-      setSellers(data || []);
+      const result = await dataApi<{ sellers: Seller[] }>('list_sellers');
+      setSellers(result.sellers || []);
     } catch (error) {
       console.error('Error loading sellers:', error);
+      if (retryCount < 3) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return loadSellers(retryCount + 1);
+      }
       toast({ 
         title: "Fel", 
         description: "Kunde inte ladda säljare. Försöker igen...", 
@@ -459,20 +454,14 @@ const Admin = () => {
     setIsAddingSeller(true);
     
     try {
-      const { data, error } = await supabase
-        .from('sellers')
-        .insert({ name: trimmedName })
-        .select()
-        .single();
-
-      if (error) throw error;
+      const result = await dataApi<{ seller: Seller }>('add_seller', { name: trimmedName });
 
       toast({ title: "Säljare tillagd!", description: `${trimmedName} har lagts till` });
       setNewSellerName('');
       
       // Update local state immediately
-      if (data) {
-        setSellers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      if (result.seller) {
+        setSellers(prev => [...prev, result.seller].sort((a, b) => a.name.localeCompare(b.name)));
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Kunde inte lägga till säljare';
@@ -511,13 +500,7 @@ const Admin = () => {
         }
       }
 
-      // Delete from database
-      const { error } = await supabase
-        .from('sellers')
-        .delete()
-        .eq('id', sellerId);
-
-      if (error) throw error;
+      await dataApi('delete_seller', { sellerId });
 
       toast({ title: "Säljare borttagen", description: `${seller.name} har tagits bort` });
       

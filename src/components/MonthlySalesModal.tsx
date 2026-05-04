@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Calendar, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { SaleDeleteButton } from '@/components/SaleDeleteButton';
+import { dataApi } from '@/utils/dataApi';
 
 interface Sale {
   id: string;
@@ -40,19 +41,8 @@ export const MonthlySalesModal: React.FC<MonthlySalesModalProps> = ({
     
     setIsLoading(true);
     try {
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-      const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
-
-      const { data, error } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('seller_name', sellerName)
-        .gte('timestamp', startOfMonth.toISOString())
-        .lte('timestamp', endOfMonth.toISOString())
-        .order('timestamp', { ascending: false });
-
-      if (error) throw error;
-      setSales(data || []);
+      const result = await dataApi<{ sales: Sale[] }>('monthly_sales', { sellerName });
+      setSales(result.sales || []);
     } catch (error) {
       console.error('Error loading monthly sales:', error);
       setSales([]);
