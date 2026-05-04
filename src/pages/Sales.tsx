@@ -9,6 +9,7 @@ import { User, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { SaleDeleteButton } from '@/components/SaleDeleteButton';
 import { getVersionedUrl } from '@/utils/media';
+import { dataApi } from '@/utils/dataApi';
 
 interface Seller {
   id: string;
@@ -29,24 +30,15 @@ const Sales = () => {
   // Load sellers from database with retry logic
   const loadSellers = async (retryCount = 0): Promise<void> => {
     try {
-      const { data, error } = await supabase
-        .from('sellers')
-        .select('*')
-        .order('name');
-      
-      if (error) {
-        // Retry with exponential backoff for connection issues
-        if (retryCount < 3 && (error.code === 'PGRST002' || error.message?.includes('schema cache'))) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return loadSellers(retryCount + 1);
-        }
-        throw error;
-      }
-      
-      setSellers(data || []);
+      const result = await dataApi<{ sellers: Seller[] }>('list_sellers');
+      setSellers(result.sellers || []);
     } catch (error) {
       console.error('Error loading sellers:', error);
+      if (retryCount < 3) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return loadSellers(retryCount + 1);
+      }
       toast({
         title: "Fel",
         description: "Kunde inte ladda säljare. Försöker igen...",
@@ -78,31 +70,15 @@ const Sales = () => {
   // Load today's sales with retry logic
   const loadTodaysSales = async (retryCount = 0): Promise<void> => {
     try {
-      // Use Stockholm timezone for correct "today" calculation
-      const now = new Date();
-      const stockholmOffset = 1; // CET, adjust for daylight saving if needed
-      const stockholmDate = new Date(now.getTime() + stockholmOffset * 60 * 60 * 1000);
-      const today = stockholmDate.toISOString().split('T')[0];
-      
-      const { data, error } = await supabase
-        .from('sales')
-        .select('*')
-        .gte('timestamp', `${today}T00:00:00.000Z`)
-        .order('timestamp', { ascending: false });
-
-      if (error) {
-        // Retry with exponential backoff for connection issues
-        if (retryCount < 3 && (error.code === 'PGRST002' || error.message?.includes('Failed to fetch'))) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return loadTodaysSales(retryCount + 1);
-        }
-        throw error;
-      }
-      
-      setTodaysSales(data || []);
+      const result = await dataApi<{ sales: any[] }>('todays_sales');
+      setTodaysSales(result.sales || []);
     } catch (error) {
       console.error('Error loading sales:', error);
+      if (retryCount < 3) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return loadTodaysSales(retryCount + 1);
+      }
       // Keep existing data on error
     }
   };
@@ -202,17 +178,11 @@ const Sales = () => {
     setIsSubmitting(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('report_sale', {
-        body: {
-          sellerId: selectedSellerId,
-          sellerName: selectedSeller.name,
-          tb: tbNumber
-        }
+      await dataApi('report_sale', {
+        sellerId: selectedSellerId,
+        sellerName: selectedSeller.name,
+        tb: tbNumber
       });
-
-      if (error) {
-        throw new Error(error.message || 'Kunde inte ansluta till servern');
-      }
 
       const description = `${selectedSeller.name} rapporterade ${tbNumber.toLocaleString('sv-SE')} tb`;
 
