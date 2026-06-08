@@ -86,14 +86,22 @@ async function ensureSchema(client: any) {
       ADD COLUMN IF NOT EXISTS customer_id uuid NULL,
       ADD COLUMN IF NOT EXISTS order_id uuid NULL,
       ADD COLUMN IF NOT EXISTS product_name text NULL,
-      ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+      ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS crm_status text NULL,
+      ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS removed_at timestamptz NULL,
+      ADD COLUMN IF NOT EXISTS removed_reason text NULL,
+      ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()
   `;
+  await client.queryObject`DROP INDEX IF EXISTS public.sales_crm_contract_id_unique`;
   await client.queryObject`
     CREATE UNIQUE INDEX IF NOT EXISTS sales_crm_contract_id_unique
-      ON public.sales (crm_contract_id) WHERE crm_contract_id IS NOT NULL
+      ON public.sales (crm_contract_id)
+      WHERE crm_contract_id IS NOT NULL AND source = 'crm'
   `;
   schemaReady = true;
 }
+
 
 async function withClient<T>(fn: (client: any) => Promise<T>): Promise<T> {
   if (!pool) throw new Error("SUPABASE_DB_URL saknas");
