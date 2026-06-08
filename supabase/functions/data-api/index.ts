@@ -197,10 +197,10 @@ Deno.serve(async (req) => {
         const day = getStockholmDayBounds();
         const month = getMonthBounds();
 
-        const dailyTotals = await client.queryObject<{ total_today: string | number }>`select coalesce(sum(amount_tb), 0) as total_today from public.sales where timestamp >= ${day.start}::timestamptz and timestamp <= ${day.end}::timestamptz`;
-        const monthlyTotals = await client.queryObject<{ total_month: string | number }>`select coalesce(sum(amount_tb), 0) as total_month from public.sales where timestamp >= ${month.start}::timestamptz and timestamp < ${month.end}::timestamptz`;
-        const todayRows = await client.queryObject<{ seller_name: string; seller_id: string | null; amount: string | number }>`select seller_name, seller_id, sum(amount_tb) as amount from public.sales where timestamp >= ${day.start}::timestamptz and timestamp <= ${day.end}::timestamptz group by seller_name, seller_id order by amount desc`;
-        const monthRows = await client.queryObject<{ seller_name: string; seller_id: string | null; amount: string | number }>`select seller_name, seller_id, sum(amount_tb) as amount from public.sales where timestamp >= ${month.start}::timestamptz and timestamp < ${month.end}::timestamptz group by seller_name, seller_id order by amount desc limit 10`;
+        const dailyTotals = await client.queryObject<{ total_today: string | number }>`select coalesce(sum(amount_tb), 0) as total_today from public.sales where timestamp >= ${day.start}::timestamptz and timestamp <= ${day.end}::timestamptz and (source <> 'crm' or is_active = true)`;
+        const monthlyTotals = await client.queryObject<{ total_month: string | number }>`select coalesce(sum(amount_tb), 0) as total_month from public.sales where timestamp >= ${month.start}::timestamptz and timestamp < ${month.end}::timestamptz and (source <> 'crm' or is_active = true)`;
+        const todayRows = await client.queryObject<{ seller_name: string; seller_id: string | null; amount: string | number }>`select seller_name, seller_id, sum(amount_tb) as amount from public.sales where timestamp >= ${day.start}::timestamptz and timestamp <= ${day.end}::timestamptz and (source <> 'crm' or is_active = true) group by seller_name, seller_id order by amount desc`;
+        const monthRows = await client.queryObject<{ seller_name: string; seller_id: string | null; amount: string | number }>`select seller_name, seller_id, sum(amount_tb) as amount from public.sales where timestamp >= ${month.start}::timestamptz and timestamp < ${month.end}::timestamptz and (source <> 'crm' or is_active = true) group by seller_name, seller_id order by amount desc limit 10`;
 
         const enrich = (row: { seller_name: string; seller_id: string | null; amount: string | number }) => {
           const seller = row.seller_id ? sellerMap.get(row.seller_id) : sellers.find((s) => s.name.toLowerCase() === row.seller_name.toLowerCase());
@@ -223,7 +223,7 @@ Deno.serve(async (req) => {
 
       if (action === "todays_sales") {
         const day = getStockholmDayBounds();
-        const rows = await client.queryObject<SaleRow>`select id, seller_name, seller_id, amount_tb, timestamp, created_at from public.sales where timestamp >= ${day.start}::timestamptz and timestamp <= ${day.end}::timestamptz order by timestamp desc`;
+        const rows = await client.queryObject<SaleRow>`select id, seller_name, seller_id, amount_tb, timestamp, created_at from public.sales where timestamp >= ${day.start}::timestamptz and timestamp <= ${day.end}::timestamptz and (source <> 'crm' or is_active = true) order by timestamp desc`;
         return { sales: rows.rows.map(rowToSale) };
       }
 
@@ -231,9 +231,10 @@ Deno.serve(async (req) => {
         const sellerName = String(body.sellerName || "").trim();
         if (!sellerName) return { error: "sellerName saknas", status: 400 };
         const month = getMonthBounds();
-        const rows = await client.queryObject<SaleRow>`select id, seller_name, seller_id, amount_tb, timestamp, created_at from public.sales where seller_name = ${sellerName} and timestamp >= ${month.start}::timestamptz and timestamp < ${month.end}::timestamptz order by timestamp desc`;
+        const rows = await client.queryObject<SaleRow>`select id, seller_name, seller_id, amount_tb, timestamp, created_at from public.sales where seller_name = ${sellerName} and timestamp >= ${month.start}::timestamptz and timestamp < ${month.end}::timestamptz and (source <> 'crm' or is_active = true) order by timestamp desc`;
         return { sales: rows.rows.map(rowToSale) };
       }
+
 
       if (action === "delete_sale") {
         const saleId = String(body.saleId || "");
