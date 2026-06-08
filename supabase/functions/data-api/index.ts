@@ -76,13 +76,34 @@ const getMonthBounds = () => {
   };
 };
 
+let schemaReady = false;
+async function ensureSchema(client: any) {
+  if (schemaReady) return;
+  await client.queryObject`
+    ALTER TABLE public.sales
+      ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual',
+      ADD COLUMN IF NOT EXISTS crm_contract_id uuid NULL,
+      ADD COLUMN IF NOT EXISTS customer_id uuid NULL,
+      ADD COLUMN IF NOT EXISTS order_id uuid NULL,
+      ADD COLUMN IF NOT EXISTS product_name text NULL,
+      ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+  `;
+  await client.queryObject`
+    CREATE UNIQUE INDEX IF NOT EXISTS sales_crm_contract_id_unique
+      ON public.sales (crm_contract_id) WHERE crm_contract_id IS NOT NULL
+  `;
+  schemaReady = true;
+}
+
 async function withClient<T>(fn: (client: any) => Promise<T>): Promise<T> {
   if (!pool) throw new Error("SUPABASE_DB_URL saknas");
   const client = await pool.connect();
   try {
+    await ensureSchema(client);
     return await fn(client);
   } finally {
     client.release();
+
   }
 }
 
