@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.data-api]
 verify_jwt = false
+
+[functions.report-crm-sale]
+verify_jwt = false
